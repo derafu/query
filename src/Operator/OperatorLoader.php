@@ -12,21 +12,20 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Operator;
 
-use Derafu\Query\Operator\Contract\OperatorConfigInterface;
-use Derafu\Query\Operator\Contract\OperatorConfigLoaderInterface;
+use Derafu\Query\Operator\Contract\OperatorLoaderInterface;
 use Exception;
 use InvalidArgumentException;
 use RuntimeException;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * Loads operator configurations from YAML files and arrays.
+ * Loads operators from YAML files and arrays.
  *
- * This class handles loading and validating operator configurations from
- * various sources. It ensures configurations meet required structure and
- * creates the corresponding configuration objects.
+ * This class handles loading and validating operators from various sources. It
+ * ensures configurations meet required structure and creates the corresponding
+ * configuration objects.
  */
-final class OperatorConfigLoader implements OperatorConfigLoaderInterface
+final class OperatorLoader implements OperatorLoaderInterface
 {
     /**
      * Required operator configuration fields and their types.
@@ -40,15 +39,7 @@ final class OperatorConfigLoader implements OperatorConfigLoaderInterface
     ];
 
     /**
-     * Loads operator configurations from a YAML file.
-     *
-     * Reads and parses a YAML file containing operator configurations.
-     * Validates the structure and creates configuration objects.
-     *
-     * @param string $path Path to the YAML configuration file.
-     * @return array<string,OperatorConfigInterface> Map of operator configs.
-     * @throws InvalidArgumentException If file cannot be read.
-     * @throws RuntimeException If configuration format is invalid.
+     * {@inheritDoc}
      */
     public function loadFromFile(string $path): array
     {
@@ -70,14 +61,7 @@ final class OperatorConfigLoader implements OperatorConfigLoaderInterface
     }
 
     /**
-     * Loads operator configurations from an array.
-     *
-     * Transforms a raw configuration array into operator configuration objects,
-     * validating structure and required fields.
-     *
-     * @param array $config Raw configuration array.
-     * @return array<string,OperatorConfigInterface> Map of operator configs.
-     * @throws RuntimeException If configuration format is invalid.
+     * {@inheritDoc}
      */
     public function loadFromArray(array $config): array
     {
@@ -92,11 +76,11 @@ final class OperatorConfigLoader implements OperatorConfigLoaderInterface
             $type = $operatorConfig['type'] ?? null;
             if ($type && !isset($config['types'][$type])) {
                 throw new RuntimeException(
-                    sprintf('Undefined operator type: %s', $type)
+                    sprintf('Undefined operator type: %s.', $type)
                 );
             }
 
-            $operators[$symbol] = new OperatorConfig(
+            $operators[$symbol] = new Operator(
                 symbol: $symbol,
                 config: $operatorConfig
             );
@@ -108,32 +92,25 @@ final class OperatorConfigLoader implements OperatorConfigLoaderInterface
     }
 
     /**
-     * Validates a set of operator configurations.
-     *
-     * Ensures all configurations have required fields and valid values. Also
-     * checks for consistency across operators.
-     *
-     * @param array<string,OperatorConfigInterface> $configs Configurations to
-     * validate.
-     * @throws RuntimeException If any validation fails.
+     * {@inheritDoc}
      */
-    public function validate(array $configs): void
+    public function validate(array $operators): void
     {
-        foreach ($configs as $symbol => $config) {
+        foreach ($operators as $symbol => $operator) {
             // Check symbol matches configuration.
-            if ($symbol !== $config->getSymbol()) {
+            if ($symbol !== $operator->getSymbol()) {
                 throw new RuntimeException(
                     sprintf(
                         'Symbol mismatch: Expected "%s" but got "%s" in configuration.',
                         $symbol,
-                        $config->getSymbol()
+                        $operator->getSymbol()
                     )
                 );
             }
 
             // Validate required fields.
             foreach (self::REQUIRED_FIELDS as $field => $type) {
-                $value = $config->get($field);
+                $value = $operator->get($field);
                 if ($value === null) {
                     throw new RuntimeException(
                         sprintf(
@@ -154,17 +131,6 @@ final class OperatorConfigLoader implements OperatorConfigLoaderInterface
                         )
                     );
                 }
-            }
-
-            // Validate SQL templates.
-            $templates = $config->getSqlTemplates();
-            if (empty($templates)) {
-                throw new RuntimeException(
-                    sprintf(
-                        'No SQL templates defined for operator "%s".',
-                        $symbol
-                    )
-                );
             }
         }
     }

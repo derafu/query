@@ -17,8 +17,7 @@ use Derafu\Query\Filter\Contract\FilterParserInterface;
 use Derafu\Query\Filter\Filter;
 use Derafu\Query\Filter\FilterParser;
 use Derafu\Query\Operator\Operator;
-use Derafu\Query\Operator\OperatorConfig;
-use Derafu\Query\Operator\OperatorConfigLoader;
+use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -33,8 +32,7 @@ use PHPUnit\Framework\TestCase;
  */
 #[CoversClass(FilterParser::class)]
 #[CoversClass(Filter::class)]
-#[CoversClass(OperatorConfig::class)]
-#[CoversClass(OperatorConfigLoader::class)]
+#[CoversClass(OperatorLoader::class)]
 #[CoversClass(Operator::class)]
 #[CoversClass(OperatorManager::class)]
 final class FilterParserTest extends TestCase
@@ -50,7 +48,7 @@ final class FilterParserTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $loader = new OperatorConfigLoader();
+        $loader = new OperatorLoader();
         $operators = $loader->loadFromFile(__DIR__ . '/../../../config/operators.yaml');
         $manager = new OperatorManager($operators);
         $this->parser = new FilterParser($manager);

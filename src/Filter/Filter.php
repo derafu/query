@@ -63,7 +63,7 @@ final class Filter implements FilterInterface
      */
     public function validate(): void
     {
-        $pattern = $this->operator->getConfig()->getValidationPattern();
+        $pattern = $this->operator->getValidationPattern();
 
         if ($pattern === null) {
             return;

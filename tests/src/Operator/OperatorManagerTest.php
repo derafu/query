@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Operator;
 
-use Derafu\Query\Operator\Contract\OperatorConfigInterface;
 use Derafu\Query\Operator\Contract\OperatorInterface;
 use Derafu\Query\Operator\Contract\OperatorManagerInterface;
 use Derafu\Query\Operator\Operator;
@@ -62,7 +61,7 @@ final class OperatorManagerTest extends TestCase
         $operator = $this->manager->getOperator('=');
         $this->assertInstanceOf(OperatorInterface::class, $operator);
         $this->assertSame('=', $operator->getSymbol());
-        $this->assertSame('standard', $operator->getConfig()->getType());
+        $this->assertSame('standard', $operator->getType());
     }
 
     /**
@@ -123,11 +122,7 @@ final class OperatorManagerTest extends TestCase
 
         $operator = $this->manager->getOperator('^');
         $this->assertSame('^', $operator->getSymbol());
-        $this->assertSame('autolike', $operator->getConfig()->getType());
-
-        // Test that it uses the base operator's SQL.
-        $result = $operator->apply('name', 'test');
-        $this->assertStringContainsString('LIKE', $result['sql']);
+        $this->assertSame('autolike', $operator->getType());
     }
 
     /**
@@ -197,26 +192,23 @@ final class OperatorManagerTest extends TestCase
      *
      * @param string $symbol The operator symbol.
      * @param array $config The operator configuration.
-     * @return OperatorConfigInterface The mock config.
+     * @return OperatorInterface The mock config.
      */
     private function createOperatorConfig(
         string $symbol,
         array $config
-    ): OperatorConfigInterface {
-        $mockConfig = $this->createMock(OperatorConfigInterface::class);
+    ): OperatorInterface {
+        $mockConfig = $this->createMock(OperatorInterface::class);
         $mockConfig->method('getSymbol')->willReturn($symbol);
         $mockConfig->method('getType')->willReturn($config['type']);
         $mockConfig->method('getName')->willReturn($config['name']);
         $mockConfig->method('getDescription')
             ->willReturn($config['description'])
         ;
-        $mockConfig->method('getSqlTemplates')
-            ->willReturn(['default' => $config['sql'] ?? ''])
-        ;
         $mockConfig->method('getValidationPattern')
             ->willReturn($config['pattern'] ?? null)
         ;
-        $mockConfig->method('getValueCasting')
+        $mockConfig->method('getCastingRules')
             ->willReturn($config['cast'] ?? [])
         ;
         $mockConfig->method('get')->willReturnCallback(

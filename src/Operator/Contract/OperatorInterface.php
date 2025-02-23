@@ -12,71 +12,95 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Operator\Contract;
 
-use InvalidArgumentException;
-use RuntimeException;
-
 /**
  * Core operator functionality.
  *
- * An operator represents a single type of database query condition. It knows
- * how to transform input values into SQL expressions according to its
- * configuration and the target database engine.
+ * This interface defines the structure for operator. Each operator needs
+ * metadata and rules that define its behavior when creating queries.
+ *
+ * The configuration determines how the operator will be identified, its
+ * constraints, and, optionally, how it transforms values into expressions for
+ * each Query Engine.
  */
 interface OperatorInterface
 {
     /**
      * Gets the operator's symbol.
      *
-     * @return string The operator symbol.
+     * The symbol is a unique identifier that represents this operator in query
+     * strings. For example, '=' for equality or '~' for pattern matching. This
+     * symbol must be unique among all registered operators in the system.
+     *
+     * @return string The operator's unique symbol.
      */
     public function getSymbol(): string;
 
     /**
-     * Gets the operator's complete configuration.
+     * Gets the operator's type.
      *
-     * Provides access to all metadata and rules that define this operator's
-     * behavior, including its symbol, type, and validation rules.
+     * The type categorizes the operator's behavior. Common types include
+     * 'comparison' for operators like '=' or '>', 'pattern' for LIKE-style
+     * operators, and 'null' for NULL-checking operators.
      *
-     * @return OperatorConfigInterface The complete operator configuration.
+     * @return string The operator's behavioral type.
      */
-    public function getConfig(): OperatorConfigInterface;
+    public function getType(): string;
 
     /**
-     * Gets the current database engine setting.
+     * Gets the operator's display name.
      *
-     * Returns the identifier of the database engine this operator is currently
-     * configured to generate SQL for (e.g., 'mysql', 'postgresql').
+     * A human-readable name for the operator that can be used in user
+     * interfaces or documentation.
      *
-     * @return string The database engine identifier.
+     * @return string The operator's display name.
      */
-    public function getEngine(): string;
+    public function getName(): string;
 
     /**
-     * Sets the target database engine.
+     * Gets the operator's description.
      *
-     * Configures which database engine's SQL dialect should be used when
-     * generating query conditions. Must be one of the engines supported in the
-     * operator's configuration.
+     * A detailed explanation of what the operator does and how it should be
+     * used.
      *
-     * @param string $engine The database engine identifier.
-     * @return self For method chaining.
-     * @throws InvalidArgumentException If the engine is not supported.
+     * @return string The operator's description.
      */
-    public function setEngine(string $engine): self;
+    public function getDescription(): string;
 
     /**
-     * Generates a SQL condition from a column and value.
+     * Gets the validation pattern for operator values.
      *
-     * Creates a complete SQL WHERE clause fragment using the operator's rules.
-     * Returns both the SQL string with placeholders and the values to bind to
-     * those placeholders.
+     * If defined, values used with this operator must match this regular
+     * expression pattern. For example, a date operator might require values in
+     * 'YYYY-MM-DD' format.
      *
-     * @param string $column The database column name to operate on.
-     * @param string|null $value The value to use in the condition.
-     * @return array{sql: string, parameters: array<string,mixed>} SQL and
-     * parameters.
-     * @throws InvalidArgumentException If the value is invalid.
-     * @throws RuntimeException If SQL cannot be generated.
+     * @return string|null The regex pattern or null if no validation needed.
      */
-    public function apply(string $column, ?string $value = null): array;
+    public function getValidationPattern(): ?string;
+
+    /**
+     * Gets the value casting rules.
+     *
+     * Defines how raw string values should be converted before using in SQL.
+     * For example, ['type' => 'int'] would ensure numeric comparison, or
+     * ['list' => ','] would split string into array.
+     *
+     * @return array<string,mixed> The casting configuration rules.
+     */
+    public function getCastingRules(): array;
+
+    /**
+     * Gets the base operator if this operator is an alias of another.
+     *
+     * @return OperatorInterface|null
+     */
+    public function getBaseOperator(): ?OperatorInterface;
+
+    /**
+     * Gets a named configuration value.
+     *
+     * @param string $name The configuration key.
+     * @param mixed $default The default configuration value.
+     * @return mixed The configuration value.
+     */
+    public function get(string $name, mixed $default = null): mixed;
 }

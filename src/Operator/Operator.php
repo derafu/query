@@ -12,9 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Operator;
 
-use Derafu\Query\Operator\Contract\OperatorConfigInterface;
 use Derafu\Query\Operator\Contract\OperatorInterface;
-use InvalidArgumentException;
 
 /**
  * Represents a query operator.
@@ -26,157 +24,87 @@ use InvalidArgumentException;
 final class Operator implements OperatorInterface
 {
     /**
-     * Current database engine for SQL generation.
-     */
-    private string $engine = 'default';
-
-    /**
      * Creates a new operator instance.
      *
-     * @param OperatorConfigInterface $config The operator's configuration.
-     * @param OperatorInterface|null $baseOperator Base operator if this extends
-     * another.
+     * @param string $symbol The operator's symbol.
+     * @param array $config Configuration array for the operator.
      */
     public function __construct(
-        private readonly OperatorConfigInterface $config,
+        private readonly string $symbol,
+        private readonly array $config,
         private readonly ?OperatorInterface $baseOperator = null
     ) {
     }
 
     /**
-     * Gets the operator's symbol.
-     *
-     * @return string The operator symbol.
+     * {@inheritDoc}
      */
     public function getSymbol(): string
     {
-        return $this->config->getSymbol();
+        return $this->symbol;
     }
 
     /**
-     * Gets the operator's configuration.
-     *
-     * @return OperatorConfigInterface The operator configuration.
+     * {@inheritDoc}
      */
-    public function getConfig(): OperatorConfigInterface
+    public function getType(): string
     {
-        return $this->config;
+        return $this->config['type'];
     }
 
     /**
-     * Gets the current database engine.
-     *
-     * @return string The database engine identifier.
+     * {@inheritDoc}
      */
-    public function getEngine(): string
+    public function getName(): string
     {
-        return $this->engine;
+        return $this->config['name'];
     }
 
     /**
-     * Sets the database engine for SQL generation.
-     *
-     * @param string $engine The database engine identifier.
-     * @return self For method chaining.
+     * {@inheritDoc}
      */
-    public function setEngine(string $engine): self
+    public function getDescription(): string
     {
-        $this->engine = $engine;
-        if ($this->baseOperator) {
-            $this->baseOperator->setEngine($engine);
-        }
-
-        return $this;
+        return $this->config['description'];
     }
 
     /**
-     * Applies the operator to create a SQL condition.
-     *
-     * @param string $column The database column name.
-     * @param string|null $value The value to apply the operator with.
-     * @return array{sql: string, parameters: array<string,mixed>} The SQL and
-     * parameters.
+     * {@inheritDoc}
      */
-    public function apply(string $column, ?string $value = null): array
+    public function getValidationPattern(): ?string
     {
-        // Validate value if pattern exists.
-        $pattern = $this->config->getValidationPattern();
-        if ($pattern !== null && $value !== null) {
-            if (!preg_match($pattern, $value)) {
-                throw new InvalidArgumentException(
-                    sprintf(
-                        'Invalid value format for operator %s: %s.',
-                        $this->getSymbol(),
-                        $value
-                    )
-                );
-            }
+        if (isset($this->config['pattern'])) {
+            return $this->config['pattern'];
         }
 
-        // Apply casting rules.
-        $value = $this->castValue($value);
-
-        // If this operator uses another, delegate to it.
-        if ($this->baseOperator) {
-            return $this->baseOperator->apply($column, $value);
+        if (str_ends_with($this->symbol, ':')) {
+            return '/.+/';
         }
 
-        // Get SQL template for current engine.
-        $templates = $this->config->getSqlTemplates();
-        $sql = $templates[$this->engine] ?? $templates['default'] ?? '';
-
-        if (empty($sql)) {
-            throw new InvalidArgumentException(
-                sprintf(
-                    'No SQL template for operator %s on engine %s.',
-                    $this->getSymbol(),
-                    $this->engine
-                )
-            );
-        }
-
-        // Create unique parameter name.
-        $param = 'param_' . uniqid();
-
-        // Replace placeholders.
-        $sql = strtr($sql, [
-            '{{column}}' => $column,
-            '{{value}}' => ':' . $param,
-        ]);
-
-        return [
-            'sql' => $sql,
-            'parameters' => [$param => $value],
-        ];
+        return null;
     }
 
     /**
-     * Applies casting rules to a value.
-     *
-     * @param string|null $value The value to cast.
-     * @return string|null The casted value.
+     * {@inheritDoc}
      */
-    private function castValue(?string $value): ?string
+    public function getCastingRules(): array
     {
-        if ($value === null) {
-            return null;
-        }
+        return $this->config['cast'] ?? [];
+    }
 
-        $rules = $this->config->getValueCasting();
-        foreach ($rules as $rule) {
-            switch ($rule) {
-                case 'like_start':
-                    $value .= '%';
-                    break;
-                case 'like':
-                    $value = '%' . $value . '%';
-                    break;
-                case 'like_end':
-                    $value = '%' . $value;
-                    break;
-            }
-        }
+    /**
+     * {@inheritDoc}
+     */
+    public function getBaseOperator(): ?OperatorInterface
+    {
+        return $this->baseOperator;
+    }
 
-        return $value;
+    /**
+     * {@inheritDoc}
+     */
+    public function get(string $name, mixed $default = null): mixed
+    {
+        return $this->config[$name] ?? $default;
     }
 }

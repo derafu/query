@@ -12,10 +12,10 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Operator;
 
-use Derafu\Query\Operator\Contract\OperatorConfigInterface;
-use Derafu\Query\Operator\Contract\OperatorConfigLoaderInterface;
-use Derafu\Query\Operator\OperatorConfig;
-use Derafu\Query\Operator\OperatorConfigLoader;
+use Derafu\Query\Operator\Contract\OperatorInterface;
+use Derafu\Query\Operator\Contract\OperatorLoaderInterface;
+use Derafu\Query\Operator\Operator;
+use Derafu\Query\Operator\OperatorLoader;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -27,16 +27,16 @@ use RuntimeException;
  * These tests verify the loader can properly load and validate operator
  * configurations from both YAML files and arrays.
  */
-#[CoversClass(OperatorConfigLoader::class)]
-#[CoversClass(OperatorConfig::class)]
-final class OperatorConfigLoaderTest extends TestCase
+#[CoversClass(OperatorLoader::class)]
+#[CoversClass(Operator::class)]
+final class OperatorLoaderTest extends TestCase
 {
     /**
      * The loader instance being tested.
      *
-     * @var OperatorConfigLoaderInterface
+     * @var OperatorLoaderInterface
      */
-    private OperatorConfigLoaderInterface $loader;
+    private OperatorLoaderInterface $loader;
 
     /**
      * Path to test YAML files.
@@ -51,7 +51,7 @@ final class OperatorConfigLoaderTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->loader = new OperatorConfigLoader();
+        $this->loader = new OperatorLoader();
         $this->fixturesPath = __DIR__ . '/../../fixtures';
     }
 
@@ -67,7 +67,7 @@ final class OperatorConfigLoaderTest extends TestCase
         $this->assertIsArray($configs);
         $this->assertNotEmpty($configs);
         $this->assertContainsOnlyInstancesOf(
-            OperatorConfigInterface::class,
+            OperatorInterface::class,
             $configs
         );
 
@@ -75,14 +75,14 @@ final class OperatorConfigLoaderTest extends TestCase
         $equalsOp = $configs['='];
         $this->assertSame('=', $equalsOp->getSymbol());
         $this->assertSame('standard', $equalsOp->getType());
-        $this->assertSame('{{column}} = {{value}}', $equalsOp->getSqlTemplates()['default']);
+        $this->assertSame('{{column}} = {{value}}', $equalsOp->get('sql'));
 
         // Test a complex operator (~).
         $regexOp = $configs['~'];
         $this->assertSame('~', $regexOp->getSymbol());
         $this->assertSame('regexp', $regexOp->getType());
-        $this->assertArrayHasKey('pgsql', $regexOp->getSqlTemplates());
-        $this->assertArrayHasKey('mysql', $regexOp->getSqlTemplates());
+        $this->assertArrayHasKey('pgsql', $regexOp->get('sql'));
+        $this->assertArrayHasKey('mysql', $regexOp->get('sql'));
     }
 
     /**
@@ -179,29 +179,6 @@ final class OperatorConfigLoaderTest extends TestCase
                 '=' => [
                     'type' => 'standard',
                     // Missing name and description.
-                ],
-            ],
-        ];
-
-        $this->expectException(RuntimeException::class);
-        $this->loader->loadFromArray($config);
-    }
-
-    /**
-     * Tests loading configuration with invalid SQL templates.
-     */
-    public function testLoadInvalidSqlTemplates(): void
-    {
-        $config = [
-            'types' => [
-                'standard' => ['description' => 'test'],
-            ],
-            'operators' => [
-                '=' => [
-                    'type' => 'standard',
-                    'name' => 'Equals',
-                    'description' => 'test',
-                    'sql' => [], // Empty SQL templates.
                 ],
             ],
         ];
