@@ -1,0 +1,23 @@
+types:
+    standard:
+        name: 'Standard Operators'
+        description: 'Basic comparison operators'
+    regexp:
+        name: 'Regular Expression Operators'
+        description: 'Pattern matching using regular expressions'
+
+operators:
+    '=':
+        type: 'standard'
+        name: 'Equals'
+        description: 'Exact value match'
+        sql: '{{column}} = {{value}}'
+
+    '~':
+        type: 'regexp'
+        name: 'Regex Match'
+        description: 'Regular expression match'
+        pattern: '/^(?!.*\*\$).*$/'
+        sql:
+            pgsql: '{{column}} ~ {{value}}'
+            mysql: '{{column}} REGEXP BINARY {{value}}'

@@ -1,0 +1,480 @@
+# Query Operators Configuration.
+version: '1.0.0'
+description: 'Query operator definitions for Query filter system.'
+
+# Operator Types.
+types:
+    'standard':
+        name: 'Standard Operators'
+        description: 'Map directly to SQL comparison operators.'
+
+    'autolike':
+        name: 'Auto-Pattern Operators'
+        description: 'LIKE operators with automatic pattern generation.'
+
+    'like':
+        name: 'Pattern Operators'
+        description: 'LIKE operators requiring explicit patterns.'
+
+    'list':
+        name: 'List Operators'
+        description: 'Operators that work with multiple values.'
+
+    'range':
+        name: 'Range Operators'
+        description: 'Operators that work with value ranges.'
+
+    'date':
+        name: 'Date Operators'
+        description: 'Operators for date-based filtering.'
+
+    'null':
+        name: 'NULL Operators'
+        description: 'Operators for handling NULL values.'
+
+    'regexp':
+        name: 'Regular Expression Operators'
+        description: 'Pattern matching using regular expressions.'
+
+    'binary':
+        name: 'Bitwise Operators'
+        description: 'Operators for bit manipulation operations.'
+
+# Operator Definitions.
+operators:
+    # Standard comparison operators.
+    '=':
+        type: 'standard'
+        name: 'Equals'
+        description: 'Matches exact value.'
+        examples: ['=123', '=text']
+        sql: '{{column}} = {{value}}'
+
+    '!=':
+        type: 'standard'
+        name: 'Not Equal'
+        description: 'Matches values different from specified value.'
+        examples: ['!=123', '!=text']
+        sql: '{{column}} != {{value}}'
+
+    '!':
+        type: 'standard'
+        alias: '!='
+        name: 'Not Equal (shorthand)'
+        description: 'Alternative syntax for not equal.'
+
+    '<>':
+        type: 'standard'
+        alias: '!='
+        name: 'Not Equal (SQL standard)'
+        description: 'SQL standard syntax for not equal.'
+
+    '>=':
+        type: 'standard'
+        name: 'Greater Than or Equal'
+        description: 'Matches values greater than or equal to specified value.'
+        examples: ['>=100', '>=2024-01-01']
+        sql: '{{column}} >= {{value}}'
+
+    '<=':
+        type: 'standard'
+        name: 'Less Than or Equal'
+        description: 'Matches values less than or equal to specified value.'
+        examples: ['<=100', '<=2024-12-31']
+        sql: '{{column}} <= {{value}}'
+
+    '>':
+        type: 'standard'
+        name: 'Greater Than'
+        description: 'Matches values greater than specified value.'
+        examples: ['>100', '>2024-01-01']
+        sql: '{{column}} > {{value}}'
+
+    '<':
+        type: 'standard'
+        name: 'Less Than'
+        description: 'Matches values less than specified value.'
+        examples: ['<100', '<2024-12-31']
+        sql: '{{column}} < {{value}}'
+
+    # Pattern matching operators (LIKE with explicit patterns).
+    'like:':
+        type: 'like'
+        name: 'Pattern Match'
+        description: 'Matches pattern using LIKE syntax (case-sensitive).'
+        examples: ['like:Jo_n', 'like:J[oa]n', 'like:%%Smith']
+        sql:
+            pgsql: '{{column}} LIKE {{value}}'
+            mysql: '{{column}} LIKE BINARY {{value}}'
+            sqlite: '{{column}} LIKE {{value}}'
+
+    'notlike:':
+        type: 'like'
+        name: 'Pattern Not Match'
+        description: 'Matches values not matching pattern (case-sensitive).'
+        examples: ['notlike:Jo_n', 'notlike:J[oa]n', 'notlike:%%Smith']
+        sql:
+            pgsql: '{{column}} NOT LIKE {{value}}'
+            mysql: '{{column}} NOT LIKE BINARY {{value}}'
+            sqlite: '{{column}} NOT LIKE {{value}}'
+
+    'ilike:':
+        type: 'like'
+        name: 'Pattern Match (case-insensitive)'
+        description: 'Matches pattern using LIKE syntax (case-insensitive).'
+        examples: ['ilike:jo_n', 'ilike:j[oa]n', 'ilike:%%smith']
+        sql:
+            pgsql: '{{column}} ILIKE {{value}}'
+            mysql: '{{column}} LIKE {{value}}'
+            sqlite: '{{column}} LIKE {{value}}'
+
+    'notilike:':
+        type: 'like'
+        name: 'Pattern Not Match (case-insensitive)'
+        description: 'Matches values not matching pattern (case-insensitive).'
+        examples: ['notilike:jo_n', 'notilike:j[oa]n', 'notilike:%%smith']
+        sql:
+            pgsql: '{{column}} NOT ILIKE {{value}}'
+            mysql: '{{column}} NOT LIKE {{value}}'
+            sqlite: '{{column}} NOT LIKE {{value}}'
+
+    # Auto-pattern LIKE operators.
+    '^':
+        type: 'autolike'
+        name: 'Starts With'
+        description: 'Matches values starting with pattern (case-sensitive).'
+        use: 'like:'
+        cast: ['like_start']
+        examples: ['^John', '^SQL']
+        notes: ['Case-sensitive except in SQLite']
+
+    '^*':
+        type: 'autolike'
+        name: 'Starts With (case-insensitive)'
+        description: 'Matches values starting with pattern (case-insensitive).'
+        use: 'ilike:'
+        cast: ['like_start']
+        examples: ['^*john', '^*sql']
+
+    '!^':
+        type: 'autolike'
+        name: 'Not Starts With'
+        description: 'Matches values not starting with pattern (case-sensitive).'
+        use: 'notlike:'
+        cast: ['like_start']
+        examples: ['!^John', '!^SQL']
+
+    '!^*':
+        type: 'autolike'
+        name: 'Not Starts With (case-insensitive)'
+        description: 'Matches values not starting with pattern (case-insensitive).'
+        use: 'notilike:'
+        cast: ['like_start']
+        examples: ['!^*john', '!^*sql']
+
+    '~~':
+        type: 'autolike'
+        name: 'Contains'
+        description: 'Matches values containing pattern (case-sensitive).'
+        use: 'like:'
+        cast: ['like']
+        examples: ['~~John', '~~SQL']
+
+    '~~*':
+        type: 'autolike'
+        name: 'Contains (case-insensitive)'
+        description: 'Matches values containing pattern (case-insensitive).'
+        use: 'ilike:'
+        cast: ['like']
+        examples: ['~~*john', '~~*sql']
+
+    '!~~':
+        type: 'autolike'
+        name: 'Not Contains'
+        description: 'Matches values not containing pattern (case-sensitive).'
+        use: 'notlike:'
+        cast: ['like']
+        examples: ['!~~John', '!~~SQL']
+
+    '!~~*':
+        type: 'autolike'
+        name: 'Not Contains (case-insensitive)'
+        description: 'Matches values not containing pattern (case-insensitive).'
+        use: 'notilike:'
+        cast: ['like']
+        examples: ['!~~*john', '!~~*sql']
+
+    '$':
+        type: 'autolike'
+        name: 'Ends With'
+        description: 'Matches values ending with pattern (case-sensitive).'
+        use: 'like:'
+        cast: ['like_end']
+        examples: ['$son', '$LLC']
+
+    '$*':
+        type: 'autolike'
+        name: 'Ends With (case-insensitive)'
+        description: 'Matches values ending with pattern (case-insensitive).'
+        use: 'ilike:'
+        cast: ['like_end']
+        examples: ['$*son', '$*llc']
+
+    '!$':
+        type: 'autolike'
+        name: 'Not Ends With'
+        description: 'Matches values not ending with pattern (case-sensitive).'
+        use: 'notlike:'
+        cast: ['like_end']
+        examples: ['!$son', '!$LLC']
+
+    '!$*':
+        type: 'autolike'
+        name: 'Not Ends With (case-insensitive)'
+        description: 'Matches values not ending with pattern (case-insensitive).'
+        use: 'notilike:'
+        cast: ['like_end']
+        examples: ['!$*son', '!$*llc']
+
+    # List operators.
+    'in:':
+        type: 'list'
+        name: 'In List'
+        description: 'Matches any value in the specified list.'
+        pattern: '/^(?:[\w\.\-\p{L}\p{M}]|\\,)+(?:,(?:[\w\.\-\p{L}\p{M}]|\\,)+)*$/u'
+        cast: ['list']
+        examples: ['in:value1', 'in:value1,value2', 'in:value1,value2,value3']
+        sql: '{{column}} IN ({{values}})'
+
+    'notin:':
+        type: 'list'
+        name: 'Not In List'
+        description: 'Matches values not in the specified list.'
+        pattern: '/^(?:[\w\.\-\p{L}\p{M}]|\\,)+(?:,(?:[\w\.\-\p{L}\p{M}]|\\,)+)*$/u'
+        cast: ['list']
+        examples: ['notin:value1', 'notin:value1,value2', 'notin:value1,value2,value3']
+        sql: '{{column}} NOT IN ({{values}})'
+
+    # Range operators.
+    'between:':
+        type: 'range'
+        name: 'Between'
+        description: 'Matches values between two specified values (inclusive).'
+        pattern: '/^[\w\.\-\p{L}\p{M}]+,[\w\.\-\p{L}\p{M}]+$/u'
+        cast: ['list']
+        examples: ['between:1,10', 'between:2024-01-01,2024-12-31']
+        sql: '{{column}} BETWEEN {{value_1}} AND {{value_2}}'
+
+    'notbetween:':
+        type: 'range'
+        name: 'Not Between'
+        description: 'Matches values outside two specified values.'
+        pattern: '/^[\w\.\-\p{L}\p{M}]+,[\w\.\-\p{L}\p{M}]+$/u'
+        cast: ['list']
+        examples: ['notbetween:1,10', 'notbetween:2024-01-01,2024-12-31']
+        sql: '{{column}} NOT BETWEEN {{value_1}} AND {{value_2}}'
+
+    # Date operators.
+    'date:':
+        type: 'date'
+        name: 'Date Match'
+        description: 'Matches specific date. Format: YYYYMMDD or YYMMDD.'
+        pattern: '/^(?:\d{2})?\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/'
+        examples: ['date:20240823', 'date:240823']
+        sql: 'DATE({{column}}) = {{value}}'
+
+    'month:':
+        type: 'date'
+        name: 'Month Match'
+        description: 'Matches specific month. Format: YYYYMM or YYMM.'
+        pattern: '/^\d{2}(\d{2})?(0[1-9]|1[0-2])$/'
+        examples: ['month:202408', 'month:2408']
+        sql: 'MONTH({{column}}) = {{value}}'
+
+    'year:':
+        type: 'date'
+        name: 'Year Match'
+        description: 'Matches specific year. Format: YYYY or YY.'
+        pattern: '/^\d{2}(\d{2})?$/'
+        examples: ['year:2024', 'year:24']
+        sql: 'YEAR({{column}}) = {{value}}'
+
+    # NULL operators.
+    'is:null':
+        type: 'null'
+        name: 'Is NULL'
+        description: 'Matches NULL values.'
+        pattern: '/^$/'
+        examples: ['is:null']
+        sql: '{{column}} IS NULL'
+
+    '<=>':
+        type: 'null'
+        alias: 'is:null'
+        name: 'Is NULL (alternative)'
+        description: 'Alternative syntax for IS NULL.'
+        examples: ['<=>']
+
+    'isnot:null':
+        type: 'null'
+        name: 'Is Not NULL'
+        description: 'Matches non-NULL values.'
+        pattern: '/^$/'
+        examples: ['isnot:null']
+        sql: '{{column}} IS NOT NULL'
+
+    # Regular expression operators.
+    '~':
+        type: 'regexp'
+        name: 'Regex Match'
+        description: 'Matches POSIX regular expression pattern (case-sensitive).'
+        pattern: '/^(?!.*\*\$)(?!.*\*\^)(?!.*\*\*)(?!.*\~\*\$).*[^*\[\](){}\\|^$.*+?].*$/'
+        examples: ['~John.*Doe', '~^hello', '~\b\d{3}\b']
+        sql:
+            pgsql: '{{column}} ~ {{value}}'
+            mysql: '{{column}} REGEXP BINARY {{value}}'
+
+    '~*':
+        type: 'regexp'
+        name: 'Regex Match (case-insensitive)'
+        description: 'Matches POSIX regular expression pattern (case-insensitive).'
+        pattern: '/^(?!.*\*\$)(?!.*\*\^)(?!.*\*\*)(?!.*\~\*\$).*[^*\[\](){}\\|^$.*+?].*$/'
+        examples: ['~*John', '~*doe$', '~*hello|world']
+        sql:
+            pgsql: '{{column}} ~* {{value}}'
+            mysql: '{{column}} REGEXP {{value}}'
+
+    '!~':
+        type: 'regexp'
+        name: 'Regex Not Match'
+        description: 'Does not match POSIX regular expression (case-sensitive).'
+        pattern: '/^(?!.*\*\$)(?!.*\*\^)(?!.*\*\*)(?!.*\~\*\$).*[^*\[\](){}\\|^$.*+?].*$/'
+        examples: ['!~John', '!~^hello', '!~\b\d{3}\b']
+        sql:
+            pgsql: '{{column}} !~ {{value}}'
+            mysql: '{{column}} NOT REGEXP BINARY {{value}}'
+
+    '!~*':
+        type: 'regexp'
+        name: 'Regex Not Match (case-insensitive)'
+        description: 'Does not match POSIX regular expression (case-insensitive).'
+        pattern: '/^(?!.*\*\$)(?!.*\*\^)(?!.*\*\*)(?!.*\~\*\$).*[^*\[\](){}\\|^$.*+?].*$/'
+        examples: ['!~*john', '!~*doe$', '!~*hello|world']
+        sql:
+            pgsql: '{{column}} !~* {{value}}'
+            mysql: '{{column}} NOT REGEXP {{value}}'
+
+    # PostgreSQL SIMILAR TO operators.
+    'similarto:':
+        type: 'regexp'
+        name: 'Similar Pattern Match'
+        description: 'Matches SQL regex pattern (PostgreSQL specific).'
+        pattern: '/^(?:[^()\[\]]|\[[^\[\]]+\]|\([^()]*\)|[%_])+$/'
+        examples: ['similarto:John%', 'similarto:(a|b)%', 'similarto:[1-9]%']
+        sql:
+            pgsql: '{{column}} SIMILAR TO {{value}}'
+
+    'notsimilarto:':
+        type: 'regexp'
+        name: 'Not Similar Pattern Match'
+        description: 'Does not match SQL regex pattern (PostgreSQL specific).'
+        pattern: '/^(?:[^()\[\]]|\[[^\[\]]+\]|\([^()]*\)|[%_])+$/'
+        examples: ['notsimilarto:John%', 'notsimilarto:(a|b)%', 'notsimilarto:[1-9]%']
+        sql:
+            pgsql: '{{column}} NOT SIMILAR TO {{value}}'
+
+    # MySQL regex aliases.
+    'regexp:':
+        type: 'regexp'
+        alias: '~'
+        name: 'Regex Match (MySQL)'
+        description: 'Matches POSIX regular expression pattern (case-sensitive).'
+        examples: ['regexp:John.*Doe', 'regexp:^hello', 'regexp:\b\d{3}\b']
+
+    'notregexp:':
+        type: 'regexp'
+        alias: '!~'
+        name: 'Regex Not Match (MySQL)'
+        description: 'Does not match POSIX regular expression (case-sensitive).'
+        examples: ['notregexp:John', 'notregexp:^hello', 'notregexp:\b\d{3}\b']
+
+    'rlike:':
+        type: 'regexp'
+        alias: '~'
+        name: 'Regex Match (MySQL alternative)'
+        description: 'Matches POSIX regular expression pattern (case-sensitive).'
+        examples: ['rlike:John.*Doe', 'rlike:^hello', 'rlike:\b\d{3}\b']
+
+    'notrlike:':
+        type: 'regexp'
+        alias: '!~'
+        name: 'Regex Not Match (MySQL alternative)'
+        description: 'Does not match POSIX regular expression (case-sensitive).'
+        examples: ['notrlike:John', 'notrlike:^hello', 'notrlike:\b\d{3}\b']
+
+    # Bitwise operators.
+    'b&':
+        type: 'binary'
+        name: 'Bitwise AND'
+        description: 'Performs bitwise AND operation.'
+        examples: ['b&1', 'b&2', 'b&4']
+        pattern: '/^\d+$/'
+        sql:
+            pgsql: '{{column}} & {{value}}'
+            mysql: 'BIT_AND({{column}}, {{value}})'
+            sqlite: '{{column}} & {{value}}'
+
+    'b|':
+        type: 'binary'
+        name: 'Bitwise OR'
+        description: 'Performs bitwise OR operation.'
+        pattern: '/^\d+$/'
+        examples: ['b|1', 'b|2', 'b|4']
+        sql:
+            pgsql: '{{column}} | {{value}}'
+            mysql: '{{column}} | {{value}}'
+            sqlite: '{{column}} | {{value}}'
+
+    'b^':
+        type: 'binary'
+        name: 'Bitwise XOR'
+        description: 'Performs bitwise XOR operation.'
+        pattern: '/^\d+$/'
+        examples: ['b^1', 'b^2', 'b^4']
+        sql:
+            pgsql: '{{column}} # {{value}}'
+            mysql: 'BIT_XOR({{column}}, {{value}})'
+            sqlite: '({{column}} | {{value}}) & ~({{column}} & {{value}})'
+
+    'b<<':
+        type: 'binary'
+        name: 'Left Shift'
+        description: 'Performs bitwise left shift.'
+        examples: ['b<<1', 'b<<2', 'b<<3']
+        pattern: '/^\d+$/'
+        sql:
+            pgsql: '{{column}} << {{value}}'
+            mysql: '<< {{column}}, {{value}}'
+            sqlite: '{{column}} << {{value}}'
+
+    'b>>':
+        type: 'binary'
+        name: 'Right Shift'
+        description: 'Performs bitwise right shift.'
+        pattern: '/^\d+$/'
+        examples: ['b>>1', 'b>>2', 'b>>3']
+        sql:
+            pgsql: '{{column}} >> {{value}}'
+            mysql: '>> {{column}}, {{value}}'
+            sqlite: '{{column}} >> {{value}}'
+
+    'b&~':
+        type: 'binary'
+        name: 'Bitwise AND NOT'
+        description: 'Performs bitwise AND with negated second operand.'
+        pattern: '/^\d+$/'
+        examples: ['b&~1', 'b&~2', 'b&~4']
+        sql:
+            pgsql: '{{column}} & ~( {{value}} )'
+            mysql: '{{column}} & ~( {{value}} )'
+            sqlite: '{{column}} & ~( {{value}} )'
