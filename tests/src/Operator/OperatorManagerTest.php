@@ -115,7 +115,7 @@ final class OperatorManagerTest extends TestCase
             'type' => 'autolike',
             'name' => 'Starts With',
             'description' => 'Starts with pattern',
-            'use' => 'like:',
+            'alias' => 'like:',
             'cast' => ['like_start'],
         ]);
         $this->manager->registerOperator($derivedConfig);
@@ -161,7 +161,7 @@ final class OperatorManagerTest extends TestCase
             'type' => 'autolike',
             'name' => 'Starts With',
             'description' => 'Starts with pattern',
-            'use' => 'non-existent:',
+            'alias' => 'non-existent:',
             'cast' => ['like_start'],
         ]);
 
@@ -179,7 +179,7 @@ final class OperatorManagerTest extends TestCase
             'type' => 'autolike',
             'name' => 'Starts With',
             'description' => 'Starts with pattern',
-            'use' => 'like:',
+            'alias' => 'like:',
             'cast' => ['like_start'],
         ]);
 

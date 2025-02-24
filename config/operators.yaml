@@ -143,7 +143,7 @@ operators:
         type: 'autolike'
         name: 'Starts With'
         description: 'Matches values starting with pattern (case-sensitive).'
-        use: 'like:'
+        alias: 'like:'
         cast: ['like_start']
         examples: ['^John', '^SQL']
         notes: ['Case-sensitive except in SQLite']
@@ -152,7 +152,7 @@ operators:
         type: 'autolike'
         name: 'Starts With (case-insensitive)'
         description: 'Matches values starting with pattern (case-insensitive).'
-        use: 'ilike:'
+        alias: 'ilike:'
         cast: ['like_start']
         examples: ['^*john', '^*sql']
 
@@ -160,7 +160,7 @@ operators:
         type: 'autolike'
         name: 'Not Starts With'
         description: 'Matches values not starting with pattern (case-sensitive).'
-        use: 'notlike:'
+        alias: 'notlike:'
         cast: ['like_start']
         examples: ['!^John', '!^SQL']
 
@@ -168,7 +168,7 @@ operators:
         type: 'autolike'
         name: 'Not Starts With (case-insensitive)'
         description: 'Matches values not starting with pattern (case-insensitive).'
-        use: 'notilike:'
+        alias: 'notilike:'
         cast: ['like_start']
         examples: ['!^*john', '!^*sql']
 
@@ -176,7 +176,7 @@ operators:
         type: 'autolike'
         name: 'Contains'
         description: 'Matches values containing pattern (case-sensitive).'
-        use: 'like:'
+        alias: 'like:'
         cast: ['like']
         examples: ['~~John', '~~SQL']
 
@@ -184,7 +184,7 @@ operators:
         type: 'autolike'
         name: 'Contains (case-insensitive)'
         description: 'Matches values containing pattern (case-insensitive).'
-        use: 'ilike:'
+        alias: 'ilike:'
         cast: ['like']
         examples: ['~~*john', '~~*sql']
 
@@ -192,7 +192,7 @@ operators:
         type: 'autolike'
         name: 'Not Contains'
         description: 'Matches values not containing pattern (case-sensitive).'
-        use: 'notlike:'
+        alias: 'notlike:'
         cast: ['like']
         examples: ['!~~John', '!~~SQL']
 
@@ -200,7 +200,7 @@ operators:
         type: 'autolike'
         name: 'Not Contains (case-insensitive)'
         description: 'Matches values not containing pattern (case-insensitive).'
-        use: 'notilike:'
+        alias: 'notilike:'
         cast: ['like']
         examples: ['!~~*john', '!~~*sql']
 
@@ -208,7 +208,7 @@ operators:
         type: 'autolike'
         name: 'Ends With'
         description: 'Matches values ending with pattern (case-sensitive).'
-        use: 'like:'
+        alias: 'like:'
         cast: ['like_end']
         examples: ['$son', '$LLC']
 
@@ -216,7 +216,7 @@ operators:
         type: 'autolike'
         name: 'Ends With (case-insensitive)'
         description: 'Matches values ending with pattern (case-insensitive).'
-        use: 'ilike:'
+        alias: 'ilike:'
         cast: ['like_end']
         examples: ['$*son', '$*llc']
 
@@ -224,7 +224,7 @@ operators:
         type: 'autolike'
         name: 'Not Ends With'
         description: 'Matches values not ending with pattern (case-sensitive).'
-        use: 'notlike:'
+        alias: 'notlike:'
         cast: ['like_end']
         examples: ['!$son', '!$LLC']
 
@@ -232,7 +232,7 @@ operators:
         type: 'autolike'
         name: 'Not Ends With (case-insensitive)'
         description: 'Matches values not ending with pattern (case-insensitive).'
-        use: 'notilike:'
+        alias: 'notilike:'
         cast: ['like_end']
         examples: ['!$*son', '!$*llc']
 
@@ -280,15 +280,17 @@ operators:
         name: 'Date Match'
         description: 'Matches specific date. Format: YYYYMMDD or YYMMDD.'
         pattern: '/^(?:\d{2})?\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/'
+        cast: ['date']
         examples: ['date:20240823', 'date:240823']
         sql: 'DATE({{column}}) = {{value}}'
 
     'month:':
         type: 'date'
         name: 'Month Match'
-        description: 'Matches specific month. Format: YYYYMM or YYMM.'
-        pattern: '/^\d{2}(\d{2})?(0[1-9]|1[0-2])$/'
-        examples: ['month:202408', 'month:2408']
+        description: 'Matches specific month in any year. Format: MM or M.'
+        pattern: '/^(0?[1-9]|1[0-2])$/'
+        cast: ['month']
+        examples: ['month:08', 'month:8']
         sql: 'MONTH({{column}}) = {{value}}'
 
     'year:':
@@ -296,8 +298,21 @@ operators:
         name: 'Year Match'
         description: 'Matches specific year. Format: YYYY or YY.'
         pattern: '/^\d{2}(\d{2})?$/'
+        cast: ['year']
         examples: ['year:2024', 'year:24']
         sql: 'YEAR({{column}}) = {{value}}'
+
+    'period:':
+        type: 'date'
+        name: 'Period Match'
+        description: 'Matches specific year and month. Format: YYYYMM or YYMM.'
+        pattern: '/^\d{2}(\d{2})?(0[1-9]|1[0-2])$/'
+        cast: ['period']
+        examples: ['period:202408', 'period:2408']
+        sql:
+            pgsql: 'TO_CHAR({{column}}, "YYYYMM") = {{value}}'
+            mysql: 'DATE_FORMAT({{column}}, "%Y%m") = {{value}}'
+            sqlite: 'strftime("%Y%m", {{column}}) = {{value}}'
 
     # NULL operators.
     'is:null':

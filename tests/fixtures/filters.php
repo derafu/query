@@ -64,8 +64,9 @@ return [
 
         // Operadores de fecha.
         'date:20240823',      // Fecha específica.
-        'month:202408',       // Mes específico.
+        'month:08',           // Mes específico.
         'year:2024',          // Año específico.
+        'period:202408',      // Año y mes específico.
 
         // Operadores NULL.
         'is:null',            // Igual a NULL.

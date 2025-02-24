@@ -80,9 +80,25 @@ final class OperatorLoader implements OperatorLoaderInterface
                 );
             }
 
+            $use = $operatorConfig['alias'] ?? null;
+            if ($use !== null) {
+                if (!isset($operators[$use])) {
+                    throw new InvalidArgumentException(
+                        sprintf(
+                            'Operator %s requires unloaded operator: %s.',
+                            $symbol,
+                            $use
+                        )
+                    );
+                }
+
+                $use = $operators[$use];
+            }
+
             $operators[$symbol] = new Operator(
                 symbol: $symbol,
-                config: $operatorConfig
+                config: $operatorConfig,
+                baseOperator: $use
             );
         }
 

@@ -59,7 +59,7 @@ final class OperatorManager implements OperatorManagerInterface
         }
 
         // Check if this operator uses another operator.
-        $use = $operator->get('use');
+        $use = $operator->get('alias');
         if ($use !== null && !isset($this->operators[$use])) {
             throw new InvalidArgumentException(
                 sprintf(
