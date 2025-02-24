@@ -13,7 +13,9 @@ declare(strict_types=1);
 namespace Derafu\Query\Builder;
 
 use Derafu\Query\Builder\Contract\QueryBuilderInterface;
+use Derafu\Query\Builder\Contract\QueryInterface;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
+use Derafu\Query\Builder\Sql\SqlQuery;
 use Derafu\Query\Builder\Sql\SqlSanitizeIdentifierTrait;
 use Derafu\Query\Engine\Contract\SqlEngineInterface;
 use Derafu\Query\Filter\CompositeCondition;
@@ -59,6 +61,55 @@ final class SqlQueryBuilder implements QueryBuilderInterface
      * @var CompositeConditionInterface
      */
     private CompositeConditionInterface $where;
+
+    /**
+     * Maximum number of records to return.
+     *
+     * @var int|null
+     */
+    private ?int $limit = null;
+
+    /**
+     * Number of records to skip.
+     *
+     * @var int|null
+     */
+    private ?int $offset = null;
+
+    /**
+     * Order by clauses for the query.
+     *
+     * @var array<array{0: string, 1: string}>|null
+     */
+    private ?array $orderBy = null;
+
+    /**
+     * Group by columns.
+     *
+     * @var array<string>|null
+     */
+    private ?array $groupBy = null;
+
+    /**
+     * Having conditions for grouped results.
+     *
+     * @var CompositeConditionInterface|null
+     */
+    private ?CompositeConditionInterface $having = null;
+
+    /**
+     * Whether to perform a DISTINCT selection.
+     *
+     * @var bool
+     */
+    private bool $distinct = false;
+
+    /**
+     * Join clauses for the query.
+     *
+     * @var array<array{table: string, condition: string|null, type: string, alias: string|null}>|null
+     */
+    private ?array $joins = null;
 
     /**
      * Create a new SQL Query Builder.
@@ -254,20 +305,164 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     /**
      * {@inheritDoc}
      */
-    public function getQuery(): array
+    public function limit(int $limit): self
+    {
+        $this->limit = $limit;
+        return $this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function offset(int $offset): self
+    {
+        $this->offset = $offset;
+        return $this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function orderBy(string|array $columns, string $direction = 'ASC'): self
+    {
+        if (is_string($columns)) {
+            $this->orderBy = [[$columns, strtoupper($direction)]];
+        } elseif (is_array($columns)) {
+            $this->orderBy = [];
+            foreach ($columns as $column => $dir) {
+                if (is_int($column)) {
+                    // Handle ['column1', 'column2'] format.
+                    $this->orderBy[] = [$dir, 'ASC'];
+                } else {
+                    // Handle ['column1' => 'DESC', 'column2' => 'ASC'] format.
+                    $this->orderBy[] = [$column, strtoupper($dir)];
+                }
+            }
+        }
+        return $this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function groupBy(string|array $columns): self
+    {
+        if (is_string($columns)) {
+            $this->groupBy = array_merge($this->groupBy ?? [], [$columns]);
+        } else {
+            $this->groupBy = array_merge($this->groupBy ?? [], $columns);
+        }
+        return $this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function having(
+        string|array|ConditionInterface|CompositeConditionInterface $condition
+    ): self {
+        $this->having = CompositeCondition::and();
+        $this->addConditions($this->having, $condition);
+        return $this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function distinct(bool $distinct = true): self
+    {
+        $this->distinct = $distinct;
+        return $this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function join(
+        string $table,
+        string $condition,
+        string $type = 'INNER',
+        ?string $alias = null
+    ): self {
+        $this->joins[] = [
+            'table' => $table,
+            'condition' => $condition,
+            'type' => strtoupper($type),
+            'alias' => $alias,
+        ];
+        return $this;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function leftJoin(string $table, string $condition, ?string $alias = null): self
+    {
+        return $this->join($table, $condition, 'LEFT', $alias);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function rightJoin(string $table, string $condition, ?string $alias = null): self
+    {
+        return $this->join($table, $condition, 'RIGHT', $alias);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function innerJoin(string $table, string $condition, ?string $alias = null): self
+    {
+        return $this->join($table, $condition, 'INNER', $alias);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function crossJoin(string $table, ?string $alias = null): self
+    {
+        return $this->join($table, '', 'CROSS', $alias);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getQuery(): QueryInterface
     {
         if (!isset($this->table)) {
             throw new RuntimeException('No table specified for query.');
         }
 
-        $sql = 'SELECT ' . implode(', ', $this->columns);
+        // Build SELECT clause.
+        $sql = 'SELECT ';
+        if (isset($this->distinct) && $this->distinct) {
+            $sql .= 'DISTINCT ';
+        }
+        $sql .= implode(', ', $this->columns);
+
+        // Build FROM clause.
         $sql .= ' FROM ' . $this->table;
         if (isset($this->alias)) {
             $sql .= ' AS ' . $this->alias;
         }
 
+        // Build JOIN clauses.
+        if (isset($this->joins) && !empty($this->joins)) {
+            foreach ($this->joins as $join) {
+                $sql .= ' ' . $join['type'] . ' JOIN ' . $join['table'];
+                if ($join['alias']) {
+                    $sql .= ' AS ' . $join['alias'];
+                }
+                if ($join['condition']) {
+                    $sql .= ' ON ' . $join['condition'];
+                }
+            }
+        }
+
         $parameters = [];
 
+        // Build WHERE clause.
         if (isset($this->where)) {
             $conditionBuilder = new SqlBuilderWhere($this->engine->getDriver());
             $result = $conditionBuilder->build($this->where)->getQuery();
@@ -275,10 +470,37 @@ final class SqlQueryBuilder implements QueryBuilderInterface
             $parameters = $result['parameters'];
         }
 
-        return [
-            'sql' => $sql,
-            'parameters' => $parameters,
-        ];
+        // Build GROUP BY clause.
+        if (isset($this->groupBy) && !empty($this->groupBy)) {
+            $sql .= ' GROUP BY ' . implode(', ', $this->groupBy);
+        }
+
+        // Build HAVING clause.
+        if (isset($this->having)) {
+            $conditionBuilder = new SqlBuilderWhere($this->engine->getDriver());
+            $result = $conditionBuilder->build($this->having)->getQuery();
+            $sql .= ' HAVING ' . $result['sql'];
+            $parameters = array_merge($parameters, $result['parameters']);
+        }
+
+        // Build ORDER BY clause.
+        if (isset($this->orderBy) && !empty($this->orderBy)) {
+            $orderClauses = [];
+            foreach ($this->orderBy as [$column, $direction]) {
+                $orderClauses[] = $column . ' ' . $direction;
+            }
+            $sql .= ' ORDER BY ' . implode(', ', $orderClauses);
+        }
+
+        // Build LIMIT and OFFSET.
+        if (isset($this->limit)) {
+            $sql .= ' LIMIT ' . $this->limit;
+            if (isset($this->offset)) {
+                $sql .= ' OFFSET ' . $this->offset;
+            }
+        }
+
+        return new SqlQuery($sql, $parameters);
     }
 
     /**

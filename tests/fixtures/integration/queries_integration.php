@@ -285,5 +285,23 @@ return [
                 ],
             ],
         ],
+
+        // Limite sin offset.
+        // TODO: Crear casos.
+
+        // Límite con offset.
+        // TODO: Crear casos.
+
+        // Ordenamiento.
+        // TODO: Crear casos.
+
+        // Agrupación.
+        // TODO: Crear casos.
+
+        // Condición de agrupación.
+        // TODO: Crear casos.
+
+        // Registros diferentes.
+        // TODO: Crear casos.
     ],
 ];

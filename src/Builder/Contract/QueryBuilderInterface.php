@@ -115,6 +115,112 @@ interface QueryBuilderInterface
     ): self;
 
     /**
+     * Sets the result limit for the query.
+     *
+     * @param int $limit Maximum number of records to return.
+     * @return self For method chaining.
+     */
+    public function limit(int $limit): self;
+
+    /**
+     * Sets the result offset for the query.
+     *
+     * @param int $offset Number of records to skip.
+     * @return self For method chaining.
+     */
+    public function offset(int $offset): self;
+
+    /**
+     * Sets the order by clause for the query.
+     *
+     * @param string|array $columns Column(s) to order by.
+     * @param string $direction Direction (ASC or DESC). Only used when $columns is a string.
+     * @return self For method chaining.
+     */
+    public function orderBy(string|array $columns, string $direction = 'ASC'): self;
+
+    /**
+     * Adds a group by clause to the query.
+     *
+     * @param string|array $columns Column(s) to group by.
+     * @return self For method chaining.
+     */
+    public function groupBy(string|array $columns): self;
+
+    /**
+     * Adds a HAVING clause to filter grouped results.
+     *
+     * @param string|array|ConditionInterface|CompositeConditionInterface $condition The condition for HAVING.
+     * @return self For method chaining.
+     */
+    public function having(
+        string|array|ConditionInterface|CompositeConditionInterface $condition
+    ): self;
+
+    /**
+     * Performs a DISTINCT selection.
+     *
+     * @param bool $distinct Whether to add DISTINCT to the query.
+     * @return self For method chaining.
+     */
+    public function distinct(bool $distinct = true): self;
+
+    /**
+     * Joins another table to the query.
+     *
+     * @param string $table The table to join.
+     * @param string $condition The join condition.
+     * @param string $type The join type (INNER, LEFT, RIGHT, etc).
+     * @param string|null $alias Optional alias for the joined table.
+     * @return self For method chaining.
+     */
+    public function join(
+        string $table,
+        string $condition,
+        string $type = 'INNER',
+        ?string $alias = null
+    ): self;
+
+    /**
+     * Adds a LEFT JOIN to the query.
+     *
+     * @param string $table The table to join.
+     * @param string $condition The join condition.
+     * @param string|null $alias Optional alias for the joined table.
+     * @return self For method chaining.
+     */
+    public function leftJoin(string $table, string $condition, ?string $alias = null): self;
+
+    /**
+     * Adds a RIGHT JOIN to the query.
+     *
+     * @param string $table The table to join.
+     * @param string $condition The join condition.
+     * @param string|null $alias Optional alias for the joined table.
+     * @return self For method chaining.
+     */
+    public function rightJoin(string $table, string $condition, ?string $alias = null): self;
+
+    /**
+     * Adds an INNER JOIN to the query.
+     *
+     * @param string $table The table to join.
+     * @param string $condition The join condition.
+     * @param string|null $alias Optional alias for the joined table.
+     * @return self For method chaining.
+     */
+    public function innerJoin(string $table, string $condition, ?string $alias = null): self;
+
+    /**
+     * Adds a CROSS JOIN to the query.
+     *
+     * @param string $table The table to join.
+     * @param string|null $alias Optional alias for the joined table.
+     * @return self For method chaining.
+     */
+    public function crossJoin(string $table, ?string $alias = null): self;
+
+    /**
      * Gets the raw query in implementation-specific format.
      *
      * @return mixed The raw query.

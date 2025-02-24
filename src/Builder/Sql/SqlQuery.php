@@ -12,14 +12,17 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Builder\Sql;
 
+use ArrayAccess;
 use Derafu\Query\Builder\Contract\QueryInterface;
+use InvalidArgumentException;
+use LogicException;
 
 /**
  * SQL query implementation.
  *
  * This class holds the generated SQL query and its parameters.
  */
-final class SqlQuery implements QueryInterface
+final class SqlQuery implements QueryInterface, ArrayAccess
 {
     /**
      * Creates a new SQL query instance.
@@ -45,5 +48,32 @@ final class SqlQuery implements QueryInterface
             'sql' => $this->sql,
             'parameters' => $this->parameters,
         ];
+    }
+
+    public function offsetExists(mixed $offset): bool
+    {
+        return in_array($offset, ['sql', 'parameters']);
+    }
+
+    public function offsetGet(mixed $offset): mixed
+    {
+        return match ($offset) {
+            'sql' => $this->sql,
+            'parameters' => $this->parameters,
+            default => throw new InvalidArgumentException(sprintf(
+                'Key %s does not exists.',
+                $offset
+            ))
+        };
+    }
+
+    public function offsetSet(mixed $offset, mixed $value): void
+    {
+        throw new LogicException('SQL Query data is immutable.');
+    }
+
+    public function offsetUnset(mixed $offset): void
+    {
+        throw new LogicException('SQL Query data is immutable.');
     }
 }
