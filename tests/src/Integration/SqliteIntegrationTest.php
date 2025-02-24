@@ -14,6 +14,8 @@ namespace Derafu\TestsQuery\Integration;
 
 use Derafu\Query\Builder\SqlQuery;
 use Derafu\Query\Builder\SqlQueryBuilder;
+use Derafu\Query\Engine\PdoEngine;
+use Derafu\Query\Engine\Contract\SqlEngineInterface;
 use Derafu\Query\Filter\Contract\FilterParserInterface;
 use Derafu\Query\Filter\Contract\PathParserInterface;
 use Derafu\Query\Filter\Filter;
@@ -39,9 +41,10 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(Operator::class)]
 #[CoversClass(OperatorLoader::class)]
 #[CoversClass(OperatorManager::class)]
+#[CoversClass(PdoEngine::class)]
 class SqliteIntegrationTest extends TestCase
 {
-    private PDO $db;
+    private SqlEngineInterface $sql;
 
     private PathParserInterface $pathParser;
 
@@ -50,16 +53,15 @@ class SqliteIntegrationTest extends TestCase
     protected function setUp(): void
     {
         // Create in-memory SQLite database.
-        $this->db = new PDO('sqlite::memory:');
-        $this->db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $this->sql = new PdoEngine(new PDO('sqlite::memory:'));
 
         // Load schema.
         $schema = file_get_contents(__DIR__ . '/../../fixtures/integration/billing_schema.sql');
-        $this->db->exec($schema);
+        $this->sql->getConnection()->exec($schema);
 
         // Load test data.
         $data = file_get_contents(__DIR__ . '/../../fixtures/integration/billing_data.sql');
-        $this->db->exec($data);
+        $this->sql->getConnection()->exec($data);
 
         // Create parser.
         $this->pathParser = new PathParser();
@@ -76,9 +78,7 @@ class SqliteIntegrationTest extends TestCase
         array $smartQuery
     ): void {
         // Execute raw SQL.
-        $stmt = $this->db->prepare($rawSql['sql']);
-        $stmt->execute($rawSql['parameters']);
-        $expected = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $expected = $this->sql->execute($rawSql['sql'], $rawSql['parameters']);
 
         // Execute using Derafu\Query\Builder.
         $actual = $this->executeWithBuilder(
@@ -108,9 +108,7 @@ class SqliteIntegrationTest extends TestCase
         $sql = 'SELECT * FROM ' . $table . ' WHERE ' . $result['sql'];
 
         // Execute.
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($result['parameters']);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return $this->sql->execute($sql, $result['parameters']);
     }
 
     public static function queryProvider(): array
