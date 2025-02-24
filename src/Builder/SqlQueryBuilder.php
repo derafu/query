@@ -16,7 +16,7 @@ use Derafu\Query\Builder\Contract\QueryBuilderInterface;
 use Derafu\Query\Builder\Contract\QueryInterface;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
 use Derafu\Query\Builder\Sql\SqlQuery;
-use Derafu\Query\Builder\Sql\SqlSanitizeIdentifierTrait;
+use Derafu\Query\Builder\Sql\SqlSanitizerTrait;
 use Derafu\Query\Engine\Contract\SqlEngineInterface;
 use Derafu\Query\Filter\CompositeCondition;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
@@ -32,7 +32,7 @@ use RuntimeException;
  */
 final class SqlQueryBuilder implements QueryBuilderInterface
 {
-    use SqlSanitizeIdentifierTrait;
+    use SqlSanitizerTrait;
 
     /**
      * The columns to select.
@@ -44,16 +44,16 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     /**
      * The base table name.
      *
-     * @var string
+     * @var string|null
      */
-    private string $table;
+    private ?string $table = null;
 
     /**
      * The table alias if any.
      *
-     * @var string
+     * @var string|null
      */
-    private string $alias;
+    private ?string $alias = null;
 
     /**
      * The where conditions (always as a composite condition).
@@ -86,9 +86,9 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     /**
      * Group by columns.
      *
-     * @var array<string>|null
+     * @var array<string>
      */
-    private ?array $groupBy = null;
+    private array $groupBy = [];
 
     /**
      * Having conditions for grouped results.
@@ -142,7 +142,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     /**
      * {@inheritDoc}
      */
-    public function select(string|array|null $columns = null, bool $sanitize = true): self
+    public function select(string|array $columns, bool $sanitize = true): self
     {
         if (is_string($columns)) {
             $this->columns = array_map('trim', explode(',', $columns));
@@ -152,7 +152,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
 
         if ($sanitize) {
             $this->columns = array_map(
-                [$this, 'sanitizeIdentifier'],
+                [$this, 'sanitizeSqlIdentifier'],
                 $this->columns
             );
         }
@@ -165,10 +165,12 @@ final class SqlQueryBuilder implements QueryBuilderInterface
      */
     public function from(string $table, ?string $alias = null): self
     {
-        $this->table = $table;
+        $this->table = $this->sanitizeSqlSimpleIdentifier($table);
 
         if ($alias !== null) {
-            $this->alias = $alias;
+            $this->alias = $this->sanitizeSqlSimpleIdentifier($alias);
+        } else {
+            $this->alias = null;
         }
 
         return $this;
@@ -308,6 +310,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     public function limit(int $limit): self
     {
         $this->limit = $limit;
+
         return $this;
     }
 
@@ -317,6 +320,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     public function offset(int $offset): self
     {
         $this->offset = $offset;
+
         return $this;
     }
 
@@ -326,19 +330,28 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     public function orderBy(string|array $columns, string $direction = 'ASC'): self
     {
         if (is_string($columns)) {
-            $this->orderBy = [[$columns, strtoupper($direction)]];
+            $orderBy = [[$columns, $direction]];
         } elseif (is_array($columns)) {
-            $this->orderBy = [];
+            $orderBy = [];
             foreach ($columns as $column => $dir) {
                 if (is_int($column)) {
                     // Handle ['column1', 'column2'] format.
-                    $this->orderBy[] = [$dir, 'ASC'];
+                    $orderBy[] = [$dir, 'ASC'];
                 } else {
                     // Handle ['column1' => 'DESC', 'column2' => 'ASC'] format.
-                    $this->orderBy[] = [$column, strtoupper($dir)];
+                    $orderBy[] = [$column, $dir];
                 }
             }
         }
+
+        $this->orderBy = [];
+        foreach ($orderBy as $ob) {
+            $this->orderBy[] = [
+                $this->sanitizeSqlIdentifier($ob[0]),
+                strtoupper($this->sanitizeSqlIdentifier($ob[1])),
+            ];
+        }
+
         return $this;
     }
 
@@ -348,10 +361,12 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     public function groupBy(string|array $columns): self
     {
         if (is_string($columns)) {
-            $this->groupBy = array_merge($this->groupBy ?? [], [$columns]);
-        } else {
-            $this->groupBy = array_merge($this->groupBy ?? [], $columns);
+            $columns = [$columns];
         }
+
+        $columns = array_map([$this, 'sanitizeSqlIdentifier'], $columns);
+        $this->groupBy = array_merge($this->groupBy, $columns);
+
         return $this;
     }
 
@@ -363,6 +378,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     ): self {
         $this->having = CompositeCondition::and();
         $this->addConditions($this->having, $condition);
+
         return $this;
     }
 
@@ -372,6 +388,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     public function distinct(bool $distinct = true): self
     {
         $this->distinct = $distinct;
+
         return $this;
     }
 
@@ -390,6 +407,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
             'type' => strtoupper($type),
             'alias' => $alias,
         ];
+
         return $this;
     }
 

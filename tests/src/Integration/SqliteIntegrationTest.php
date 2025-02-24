@@ -16,6 +16,7 @@ use Derafu\Query\Builder\Contract\QueryBuilderInterface;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
 use Derafu\Query\Builder\Sql\SqlQuery;
 use Derafu\Query\Builder\SqlQueryBuilder;
+use Derafu\Query\Config\QueryConfig;
 use Derafu\Query\Engine\Contract\SqlEngineInterface;
 use Derafu\Query\Engine\SqlEngine;
 use Derafu\Query\Filter\CompositeCondition;
@@ -34,6 +35,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
+#[CoversClass(QueryConfig::class)]
 #[CoversClass(SqlQueryBuilder::class)]
 #[CoversClass(SqlBuilderWhere::class)]
 #[CoversClass(SqlQuery::class)]
@@ -77,81 +79,18 @@ class SqliteIntegrationTest extends TestCase
     #[DataProvider('queryProvider')]
     public function testSqlQueries(
         string $description,
-        array $rawSql,
-        array $smartQuery
+        array $sql,
+        array $query
     ): void {
         // Execute raw SQL.
-        $expected = $this->engine->execute($rawSql['sql'], $rawSql['parameters']);
+        $expected = $this->engine->execute($sql['sql'], $sql['parameters']);
 
-        // Build query using our fluent builder
-        $builder = $this->buildQueryFromFixture($smartQuery);
+        // Build query using ConfigQuery and the QueryBuilder, then execute.
+        $config = new QueryConfig($query);
+        $actual = $config->applyTo($this->query->new())->execute();
 
-        // Execute and compare results
-        $actual = $builder->execute();
-
+        // Compare results.
         $this->assertSame($expected, $actual, $description);
-    }
-
-    /**
-     * Builds a query from the fixture structure.
-     *
-     * This method handles complex query structures including nested conditions.
-     *
-     * @param array $fixture The fixture structure defining the query.
-     * @return QueryBuilderInterface The constructed query builder.
-     */
-    private function buildQueryFromFixture(array $fixture): QueryBuilderInterface
-    {
-        // Start with the table
-        $builder = $this->query->table($fixture['table']);
-
-        // Process basic where condition
-        if (isset($fixture['where'])) {
-            $builder->where($fixture['where']);
-        }
-
-        // Process additional conditions
-        $this->processAdditionalConditions($builder, $fixture);
-
-        return $builder;
-    }
-
-    /**
-     * Processes additional conditions based on fixture keys.
-     *
-     * @param QueryBuilderInterface $builder The query builder to modify.
-     * @param array $fixture The fixture to process.
-     */
-    private function processAdditionalConditions(
-        QueryBuilderInterface $builder,
-        array $fixture
-    ): void {
-        // Process simple additional conditions.
-        if (isset($fixture['andWhere'])) {
-            $builder->andWhere($fixture['andWhere']);
-        }
-
-        if (isset($fixture['orWhere'])) {
-            $builder->orWhere($fixture['orWhere']);
-        }
-
-        if (isset($fixture['andWhereOr'])) {
-            $builder->andWhereOr($fixture['andWhereOr']);
-        }
-
-        // Process advanced/multi-step conditions.
-        if (isset($fixture['multiStep'])) {
-            foreach ($fixture['multiStep'] as $step) {
-                $method = key($step);
-                $condition = $step[$method];
-
-                if ($method === 'orWhere') {
-                    $builder->orWhere($condition);
-                } else {
-                    $builder->$method($condition);
-                }
-            }
-        }
     }
 
     public static function queryProvider(): array

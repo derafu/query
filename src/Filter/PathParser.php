@@ -23,10 +23,11 @@ use InvalidArgumentException;
  *
  *   - profile__address__city (accessing nested model fields).
  *   - author+left__books (specifying join types for relations).
- *   - author(join:left)__books (alternative join syntax).
+ *   - author[join:left]__books (specifying options like join type).
  *   - author:a__books (specifying aliases).
- *   - author(alias:a)__books (alternative alias syntax).
- *   - author(join:left,alias:a)__books (combined options).
+ *   - author[alias:a]__books (alternative alias syntax).
+ *   - author[join:left,alias:a]__books (combined options).
+ *   - price(f:AVG) (applying SQL functions to fields).
  *
  * Each segment in the path represents a field/column name, not a table name.
  * The actual table names are determined by the model/entity configuration.
@@ -41,11 +42,8 @@ final class PathParser implements PathParserInterface
     private const VALID_JOIN_TYPES = ['inner', 'left', 'cross', 'right'];
 
     /**
-     * Pattern for valid field/column names.
-     * Allows letters, numbers, and underscores, must start with a letter.
+     * {@inheritDoc}
      */
-    private const FIELD_NAME_PATTERN = '/^[a-zA-Z][a-zA-Z0-9_]*$/';
-
     public function parse(string $expression): PathInterface
     {
         if (empty($expression)) {
@@ -86,7 +84,7 @@ final class PathParser implements PathParserInterface
         }
 
         // Parse options first as they are the most distinctive.
-        if (preg_match('/^(.+?)\(([\w:,]+)\)$/', $name, $matches)) {
+        if (preg_match('/^(.+?)\[([\w:,]+)\]$/', $name, $matches)) {
             $name = $matches[1];
             $options = $this->parseOptions($matches[2]);
 
@@ -109,6 +107,11 @@ final class PathParser implements PathParserInterface
             // Check for join type (+left, +inner, +cross, +right).
             if (preg_match('/^(.+)\+(\w+)$/', $name, $matches)) {
                 $name = $matches[1];
+                if (str_contains($name, '+')) {
+                    throw new InvalidArgumentException(
+                        sprintf('Invalid name in join: %s.', $name)
+                    );
+                }
                 $joinType = strtolower($matches[2]);
                 if (!in_array($joinType, self::VALID_JOIN_TYPES)) {
                     throw new InvalidArgumentException(
@@ -120,18 +123,26 @@ final class PathParser implements PathParserInterface
             // Check for alias (:alias).
             if (preg_match('/^(.+):(\w+)$/', $name, $matches)) {
                 $name = $matches[1];
+                if (str_contains($name, '+')) {
+                    throw new InvalidArgumentException(
+                        sprintf('Invalid name in join: %s.', $name)
+                    );
+                }
                 $alias = $matches[2];
             }
         }
 
         // Validate the field name after removing all metadata.
-        if (!preg_match(self::FIELD_NAME_PATTERN, $name)) {
-            throw new InvalidArgumentException(
-                sprintf(
-                    'Invalid field name: %s. Field names must start with a letter and contain only letters, numbers, and underscores.',
-                    $name
-                )
-            );
+        // IMPORTANT: This will return a name that should be sanitized when
+        // building the query. Here we only validate that a name exists, but not
+        // that it is secure.
+        if (empty($name)) {
+            throw new InvalidArgumentException('Field name cannot be empty.');
+        }
+
+        // Basic check (not sanitization).
+        if (preg_match('/^[^a-zA-Z0-9_]|[^a-zA-Z0-9_)_]$/', $name)) {
+            throw new InvalidArgumentException('Invalid characters found. Allowed at the beginning: letters, numbers, underscore. Allowed at the end: letters, numbers, underscore, closing parenthesis.');
         }
 
         return new Segment(

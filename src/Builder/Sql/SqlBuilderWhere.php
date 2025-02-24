@@ -32,7 +32,7 @@ use UnderflowException;
  */
 final class SqlBuilderWhere implements QueryBuilderWhereInterface
 {
-    use SqlSanitizeIdentifierTrait;
+    use SqlSanitizerTrait;
 
     /**
      * Create a new SQL Query Builder Where.
@@ -119,7 +119,10 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         }
 
         // Create parameters for the query.
-        $parameters = $this->createParameters($value, $path->getColumn());
+        $parameters = $this->createParameters(
+            $value,
+            $this->sanitizeSqlSimpleIdentifier($path->getColumn())
+        );
 
         // Build the WHERE clause.
         return new SqlQuery(...$this->createWhere(
@@ -360,6 +363,6 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
     {
         // TODO: Handle joins and aliases.
         $column = $path->getColumn();
-        return $this->sanitizeIdentifier($column);
+        return $this->sanitizeSqlIdentifier($column);
     }
 }

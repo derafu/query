@@ -29,10 +29,13 @@
     </source>
     <testsuites>
         <testsuite name="functional">
-            <directory>tests/src/functional</directory>
+            <directory>tests/src/Functional</directory>
         </testsuite>
         <testsuite name="integration">
-            <directory>tests/src/integration</directory>
+            <directory>tests/src/Integration</directory>
+        </testsuite>
+        <testsuite name="sql_injection">
+            <directory>tests/src/SqlInjection</directory>
         </testsuite>
     </testsuites>
     <coverage

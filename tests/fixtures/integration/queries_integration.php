@@ -287,21 +287,222 @@ return [
         ],
 
         // Limite sin offset.
-        // TODO: Crear casos.
+        'limit_only_top_products' => [
+            'description' => 'Get top 3 products ordered by price',
+            'sql' => [
+                'sql' => 'SELECT * FROM products ORDER BY price DESC LIMIT 3',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'products',
+                'orderBy' => ['price' => 'DESC'],
+                'limit' => 3,
+            ],
+        ],
+        'limit_only_newest_invoices' => [
+            'description' => 'Get 2 newest invoices',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices ORDER BY created_at DESC LIMIT 2',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'orderBy' => ['created_at' => 'DESC'],
+                'limit' => 2,
+            ],
+        ],
 
         // Límite con offset.
-        // TODO: Crear casos.
+        'limit_offset_invoices' => [
+            'description' => 'Get invoices with pagination (page 2, size 2)',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices ORDER BY id ASC LIMIT 2 OFFSET 2',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'orderBy' => ['id' => 'ASC'],
+                'limit' => 2,
+                'offset' => 2,
+            ],
+        ],
+        'limit_offset_customers' => [
+            'description' => 'Get customers with pagination (page 2, size 1)',
+            'sql' => [
+                'sql' => 'SELECT * FROM customers ORDER BY id ASC LIMIT 1 OFFSET 1',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'customers',
+                'orderBy' => ['id' => 'ASC'],
+                'limit' => 1,
+                'offset' => 1,
+            ],
+        ],
 
         // Ordenamiento.
-        // TODO: Crear casos.
+        'ordering_products_multiple' => [
+            'description' => 'Get products ordered by category ASC and price DESC',
+            'sql' => [
+                'sql' => 'SELECT * FROM products ORDER BY category ASC, price DESC',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'products',
+                'orderBy' => ['category' => 'ASC', 'price' => 'DESC'],
+            ],
+        ],
+        'ordering_invoices_by_status' => [
+            'description' => 'Get invoices ordered by status and date',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices ORDER BY status ASC, date DESC',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'orderBy' => ['status' => 'ASC', 'date' => 'DESC'],
+            ],
+        ],
 
         // Agrupación.
-        // TODO: Crear casos.
+        'grouping_products_by_category' => [
+            'description' => 'Get count of products by category',
+            'sql' => [
+                'sql' => 'SELECT category, COUNT(*) as count FROM products GROUP BY category',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'products',
+                'select' => 'category, COUNT(*) as count',
+                'groupBy' => 'category',
+            ],
+        ],
+        'grouping_invoices_by_status' => [
+            'description' => 'Get sum of invoice totals by status',
+            'sql' => [
+                'sql' => 'SELECT status, SUM(total) as total_amount FROM invoices GROUP BY status',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'select' => 'status, SUM(total) as total_amount',
+                'groupBy' => 'status',
+            ],
+        ],
 
         // Condición de agrupación.
-        // TODO: Crear casos.
+        'grouping_with_having_high_value' => [
+            'description' => 'Get product categories with average price > 500',
+            'sql' => [
+                'sql' => 'SELECT category, AVG(price) as avg_price FROM products GROUP BY category HAVING AVG(price) > :value',
+                'parameters' => ['value' => '500'],
+            ],
+            'query' => [
+                'table' => 'products',
+                'select' => 'category, AVG(price) as avg_price',
+                'groupBy' => 'category',
+                'having' => 'AVG(price)?>500',
+            ],
+        ],
+        'grouping_with_having_min_count' => [
+            'description' => 'Get statuses with at least 2 invoices',
+            'sql' => [
+                'sql' => 'SELECT status, COUNT(*) as count FROM invoices GROUP BY status HAVING COUNT(*) >= :value',
+                'parameters' => ['value' => '2'],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'select' => 'status, COUNT(*) as count',
+                'groupBy' => 'status',
+                'having' => 'COUNT(*)?>1',
+            ],
+        ],
 
         // Registros diferentes.
-        // TODO: Crear casos.
+        'distinct_customer_types' => [
+            'description' => 'Get distinct customer types',
+            'sql' => [
+                'sql' => 'SELECT DISTINCT type FROM customers',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'customers',
+                'select' => 'type',
+                'distinct' => true,
+            ],
+        ],
+        'distinct_invoice_statuses' => [
+            'description' => 'Get distinct invoice statuses',
+            'sql' => [
+                'sql' => 'SELECT DISTINCT status FROM invoices',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'select' => 'status',
+                'distinct' => true,
+            ],
+        ],
+
+        // Joins.
+        // 'join_invoices_customers' => [
+        //     'description' => 'Get invoices with customer information',
+        //     'sql' => [
+        //         'sql' => 'SELECT i.id, i.number, i.total, c.name as customer_name FROM invoices i INNER JOIN customers c ON i.customer_id = c.id',
+        //         'parameters' => [],
+        //     ],
+        //     'query' => [
+        //         'table' => 'invoices',
+        //         'alias' => 'i',
+        //         'select' => 'i.id, i.number, i.total, c.name as customer_name',
+        //         'innerJoin' => ['table' => 'customers', 'alias' => 'c', 'condition' => 'i.customer_id = c.id'],
+        //     ],
+        // ],
+        // 'left_join_customers_invoices' => [
+        //     'description' => 'Get all customers with their invoices (if any)',
+        //     'sql' => [
+        //         'sql' => 'SELECT c.name, COUNT(i.id) as invoice_count FROM customers c LEFT JOIN invoices i ON c.id = i.customer_id GROUP BY c.id, c.name',
+        //         'parameters' => [],
+        //     ],
+        //     'query' => [
+        //         'table' => 'customers',
+        //         'alias' => 'c',
+        //         'select' => 'c.name, COUNT(i.id) as invoice_count',
+        //         'leftJoin' => ['table' => 'invoices', 'alias' => 'i', 'condition' => 'c.id = i.customer_id'],
+        //         'groupBy' => ['c.id', 'c.name'],
+        //     ],
+        // ],
+
+        // Combinación de características.
+        'complex_query_filtered_ordered_limited' => [
+            'description' => 'Get top 3 paid invoices with total > 1000, ordered by total',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices WHERE status = :value1 AND total > :value2 ORDER BY total DESC LIMIT 3',
+                'parameters' => ['value1' => 'paid', 'value2' => '1000'],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'where' => ['status?=paid', 'total?>1000'],
+                'orderBy' => ['total' => 'DESC'],
+                'limit' => 3,
+            ],
+        ],
+        /*'complex_query_join_group_having_order' => [
+            'description' => 'Get customers with high-value invoices',
+            'sql' => [
+                'sql' => 'SELECT c.id, c.name, SUM(i.total) as total_spent FROM customers c INNER JOIN invoices i ON c.id = i.customer_id WHERE i.status = :value1 GROUP BY c.id, c.name HAVING SUM(i.total) > :value2 ORDER BY total_spent DESC',
+                'parameters' => ['value1' => 'paid', 'value2' => '1000'],
+            ],
+            'query' => [
+                'table' => 'customers',
+                'alias' => 'c',
+                'select' => 'c.id, c.name, SUM(i.total) as total_spent',
+                'innerJoin' => ['table' => 'invoices', 'alias' => 'i', 'condition' => 'c.id = i.customer_id'],
+                'where' => 'i.status?=paid',
+                'groupBy' => ['c.id', 'c.name'],
+                'having' => 'SUM(i.total)?>1000',
+                'orderBy' => ['total_spent' => 'DESC'],
+            ],
+        ],*/
     ],
 ];

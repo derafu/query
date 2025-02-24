@@ -46,10 +46,10 @@ interface QueryBuilderInterface
     /**
      * Creates a new SELECT query.
      *
-     * @param string|array|null $columns Columns to select or null for all.
+     * @param string|array $columns Columns to select or null for all.
      * @return self For method chaining.
      */
-    public function select(string|array|null $columns = null): self;
+    public function select(string|array $columns): self;
 
     /**
      * Sets the base table for the query.

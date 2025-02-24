@@ -36,20 +36,20 @@ return [
         'orders:o__items__price',      // Single alias.
 
         // Paths with options.
-        'author__books(alias:b)__title',                   // Single option.
-        'users(alias:u,join:left)__posts__content',        // Multiple options.
-        'orders(status:pending)__items__price',            // Single option.
-        'posts(order:created_at,status:published)__title', // Multiple options.
+        'author__books[alias:b]__title',                   // Single option.
+        'users[alias:u,join:left]__posts__content',        // Multiple options.
+        'orders[status:pending]__items__price',            // Single option.
+        'posts[order:created_at,status:published]__title', // Multiple options.
 
         // Complex combinations.
-        'author:a+left__books(order:created_at)__title',   // Join + alias + options.
-        'attachments:p+left__comments(alias:c)__content',  // All features.
+        'author:a+left__books[order:created_at]__title',   // Join + alias + options.
+        'attachments:p+left__comments[alias:c]__content',  // All features.
         'author:a+left__books',        // Alias with join.
 
         // Multiple segments with same feature.
         'author+left__books+left__chapters__title',        // Multiple joins.
         'users:u__posts:p__comments:c__content',           // Multiple aliases.
-        'posts(status:draft)__comments(limit:5)__text',    // Multiple options.
+        'posts[status:draft]__comments[limit:5]__text',    // Multiple options.
     ],
 
     // Invalid path expressions (FAIL).
@@ -72,11 +72,11 @@ return [
         ':a__books',                   // Alias without table.
 
         // Invalid options.
-        'author__(order:asc)__books',  // Empty segment name with options.
-        'author__books()',             // Empty options.
-        'author__books(invalid)',      // Invalid option format.
-        'author__books(order:)',       // Empty option value.
-        'books(:created_at)',          // Empty option key.
+        'author__[order:asc]__books',  // Empty segment name with options.
+        'author__books[]',             // Empty options.
+        'author__books[invalid]',      // Invalid option format.
+        'author__books[order:]',       // Empty option value.
+        'books[:created_at]',          // Empty option key.
 
         // Invalid combinations.
         'author+left:a__books',        // Join with alias (wrong order).

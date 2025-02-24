@@ -114,7 +114,7 @@ final class PathParserTest extends TestCase
         $this->assertNull($segments[2]->getAlias());
 
         // Test options.
-        $path = $this->parser->parse('posts(order:created_at,limit:10)__comments');
+        $path = $this->parser->parse('posts[order:created_at,limit:10]__comments');
         $segments = $path->getSegments();
         $this->assertSame(
             ['order' => 'created_at', 'limit' => '10'],
@@ -123,7 +123,7 @@ final class PathParserTest extends TestCase
         $this->assertNull($segments[1]->getOptions());
 
         // Test complex combination.
-        $path = $this->parser->parse('author:a+left__books(order:title)');
+        $path = $this->parser->parse('author:a+left__books[order:title]');
         $segments = $path->getSegments();
         $this->assertSame('a', $segments[0]->getAlias());
         $this->assertSame('left', $segments[0]->getJoinType());
