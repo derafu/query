@@ -10,7 +10,7 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\Query\Builder;
+namespace Derafu\Query\Builder\Sql;
 
 use Derafu\Query\Builder\Contract\QueryInterface;
 

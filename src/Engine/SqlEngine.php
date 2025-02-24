@@ -27,7 +27,7 @@ use PDO;
  *   - Connection management.
  *   - Error handling through PDO's exception mode.
  */
-final class PdoEngine implements SqlEngineInterface
+final class SqlEngine implements SqlEngineInterface
 {
     /**
      * Creates a new PDO engine instance.
@@ -58,5 +58,13 @@ final class PdoEngine implements SqlEngineInterface
     public function getConnection(): PDO
     {
         return $this->connection;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getDriver(): string
+    {
+        return $this->connection->getAttribute(PDO::ATTR_DRIVER_NAME);
     }
 }

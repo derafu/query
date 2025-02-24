@@ -12,8 +12,9 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Functional\Builder;
 
-use Derafu\Query\Builder\SqlQuery;
-use Derafu\Query\Builder\SqlQueryBuilder;
+use Derafu\Query\Builder\Sql\SqlBuilderWhere;
+use Derafu\Query\Builder\Sql\SqlQuery;
+use Derafu\Query\Filter\Condition;
 use Derafu\Query\Filter\Contract\FilterParserInterface;
 use Derafu\Query\Filter\Contract\PathParserInterface;
 use Derafu\Query\Filter\Filter;
@@ -28,7 +29,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-#[CoversClass(SqlQueryBuilder::class)]
+#[CoversClass(SqlBuilderWhere::class)]
 #[CoversClass(SqlQuery::class)]
 #[CoversClass(Filter::class)]
 #[CoversClass(Path::class)]
@@ -38,7 +39,8 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(OperatorManager::class)]
 #[CoversClass(FilterParser::class)]
 #[CoversClass(PathParser::class)]
-class SqlQueryBuilderTest extends TestCase
+#[CoversClass(Condition::class)]
+class SqlBuilderWhereTest extends TestCase
 {
     private PathParserInterface $pathParser;
 
@@ -61,14 +63,15 @@ class SqlQueryBuilderTest extends TestCase
         string $engine
     ): void {
         // Create the builder.
-        $builder = new SqlQueryBuilder($engine);
+        $builder = new SqlBuilderWhere($engine);
 
         // Parse path and filter.
         $path = $this->pathParser->parse($pathExpression);
         $filter = $this->filterParser->parse($filterExpression);
+        $condition = new Condition($path, $filter);
 
         // Build query
-        $query = $builder->build($path, $filter);
+        $query = $builder->build($condition);
         $result = $query->getQuery();
 
         // Replace generated unique IDs with placeholder for comparison.
@@ -80,7 +83,7 @@ class SqlQueryBuilderTest extends TestCase
 
     public static function queryCasesProvider(): array
     {
-        $cases = require __DIR__ . '/../../../fixtures/functional/queries_sql.php';
+        $cases = require __DIR__ . '/../../../fixtures/functional/queries_sql_where.php';
         $testCases = [];
 
         foreach ($cases['cases'] as $case) {

@@ -40,4 +40,11 @@ interface SqlEngineInterface
      * @return mixed The database connection instance.
      */
     public function getConnection(): mixed;
+
+    /**
+     * Gets the driver name normalized to PDO driver name conventions.
+     *
+     * @return string
+     */
+    public function getDriver(): string;
 }
