@@ -10,7 +10,7 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\TestsQuery\Operator;
+namespace Derafu\TestsQuery\Functional\Operator;
 
 use Derafu\Query\Operator\Contract\OperatorInterface;
 use Derafu\Query\Operator\Contract\OperatorManagerInterface;

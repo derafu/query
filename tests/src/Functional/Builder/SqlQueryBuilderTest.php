@@ -10,7 +10,7 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\TestsQuery\Builder;
+namespace Derafu\TestsQuery\Functional\Builder;
 
 use Derafu\Query\Builder\SqlQuery;
 use Derafu\Query\Builder\SqlQueryBuilder;
@@ -48,7 +48,7 @@ class SqlQueryBuilderTest extends TestCase
     {
         $this->pathParser = new PathParser();
         $loader = new OperatorLoader();
-        $operators = $loader->loadFromFile(__DIR__ . '/../../../config/operators.yaml');
+        $operators = $loader->loadFromFile(__DIR__ . '/../../../../config/operators.yaml');
         $manager = new OperatorManager($operators);
         $this->filterParser = new FilterParser($manager);
     }
@@ -80,7 +80,7 @@ class SqlQueryBuilderTest extends TestCase
 
     public static function queryCasesProvider(): array
     {
-        $cases = require __DIR__ . '/../../fixtures/queries_sql.php';
+        $cases = require __DIR__ . '/../../../fixtures/functional/queries_sql.php';
         $testCases = [];
 
         foreach ($cases['cases'] as $case) {

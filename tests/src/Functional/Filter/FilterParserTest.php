@@ -10,7 +10,7 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\TestsQuery\Filter;
+namespace Derafu\TestsQuery\Functional\Filter;
 
 use Derafu\Query\Filter\Contract\FilterInterface;
 use Derafu\Query\Filter\Contract\FilterParserInterface;
@@ -49,7 +49,7 @@ final class FilterParserTest extends TestCase
     {
         parent::setUp();
         $loader = new OperatorLoader();
-        $operators = $loader->loadFromFile(__DIR__ . '/../../../config/operators.yaml');
+        $operators = $loader->loadFromFile(__DIR__ . '/../../../../config/operators.yaml');
         $manager = new OperatorManager($operators);
         $this->parser = new FilterParser($manager);
     }
@@ -63,7 +63,7 @@ final class FilterParserTest extends TestCase
      */
     public static function parserCasesProvider(): array
     {
-        $filters = require __DIR__ . '/../../fixtures/filters.php';
+        $filters = require __DIR__ . '/../../../fixtures/functional/filters.php';
 
         $cases = [];
 

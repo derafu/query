@@ -10,7 +10,7 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\TestsQuery\Operator;
+namespace Derafu\TestsQuery\Functional\Operator;
 
 use Derafu\Query\Operator\Contract\OperatorInterface;
 use Derafu\Query\Operator\Contract\OperatorLoaderInterface;
@@ -52,7 +52,7 @@ final class OperatorLoaderTest extends TestCase
     {
         parent::setUp();
         $this->loader = new OperatorLoader();
-        $this->fixturesPath = __DIR__ . '/../../fixtures';
+        $this->fixturesPath = __DIR__ . '/../../../fixtures/functional';
     }
 
     /**

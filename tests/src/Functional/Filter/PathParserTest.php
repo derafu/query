@@ -10,7 +10,7 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\TestsQuery\Filter;
+namespace Derafu\TestsQuery\Functional\Filter;
 
 use Derafu\Query\Filter\Contract\PathInterface;
 use Derafu\Query\Filter\Contract\PathParserInterface;
@@ -56,7 +56,7 @@ final class PathParserTest extends TestCase
      */
     public static function parserCasesProvider(): array
     {
-        $paths = require __DIR__ . '/../../fixtures/paths.php';
+        $paths = require __DIR__ . '/../../../fixtures/functional/paths.php';
 
         $cases = [];
 
