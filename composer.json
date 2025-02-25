@@ -1,6 +1,6 @@
 {
     "name": "derafu/query",
-    "description": "Derafu: Query - Smart Query Builder",
+    "description": "Derafu: Query - Expressive Path-Based Query Builder for PHP",
     "type": "library",
     "homepage": "https://derafu.org/query",
     "license": "MIT",

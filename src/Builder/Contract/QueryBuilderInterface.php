@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Derafu: Query - Smart Query Builder.
+ * Derafu: Query - Expressive Path-Based Query Builder for PHP.
  *
  * Copyright (c) 2025 Esteban De La Fuente Rubio / Derafu <https://www.derafu.org>
  * Licensed under the MIT License.
