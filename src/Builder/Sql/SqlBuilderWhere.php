@@ -121,7 +121,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         // Create parameters for the query.
         $parameters = $this->createParameters(
             $value,
-            $this->sanitizeSqlSimpleIdentifier($path->getColumn())
+            $this->sanitizeSqlSimpleIdentifier($path->getLastSegment()->getName())
         );
 
         // Build the WHERE clause.
@@ -362,7 +362,8 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
     private function buildColumnFromPath(PathInterface $path): string
     {
         // TODO: Handle joins and aliases.
-        $column = $path->getColumn();
+        $column = $path->getLastSegment()->getName();
+
         return $this->sanitizeSqlIdentifier($column);
     }
 }

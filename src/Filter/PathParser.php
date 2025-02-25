@@ -17,30 +17,19 @@ use Derafu\Query\Filter\Contract\PathParserInterface;
 use InvalidArgumentException;
 
 /**
- * Parser for field lookup expressions in the style of Django's lookups.
+ * Parser for field lookup expressions.
  *
  * Handles expressions like:
  *
- *   - profile__address__city (accessing nested model fields).
- *   - author+left__books (specifying join types for relations).
- *   - author[join:left]__books (specifying options like join type).
- *   - author:a__books (specifying aliases).
- *   - author[alias:a]__books (alternative alias syntax).
- *   - author[join:left,alias:a]__books (combined options).
- *   - price(f:AVG) (applying SQL functions to fields).
+ *   - profile__address__city (accessing nested fields).
+ *   - author[alias:a]__books (specifying alias option).
+ *   - invoices__customers[on:customer_id=id]__name (specifying relation with equals).
+ *   - author[alias:a,on:author_id=id]__books (multiple options).
  *
- * Each segment in the path represents a field/column name, not a table name.
- * The actual table names are determined by the model/entity configuration.
+ * Each segment in the path represents a field/column name with optional metadata.
  */
 final class PathParser implements PathParserInterface
 {
-    /**
-     * Valid join types for related fields.
-     *
-     * @var array<string>
-     */
-    private const VALID_JOIN_TYPES = ['inner', 'left', 'cross', 'right'];
-
     /**
      * {@inheritDoc}
      */
@@ -74,81 +63,34 @@ final class PathParser implements PathParserInterface
     private function parseSegment(string $expression): Segment
     {
         $name = $expression;
-        $joinType = null;
-        $alias = null;
-        $options = null;
+        $options = [];
 
         // First validate the initial raw name is not empty.
         if (empty($name)) {
             throw new InvalidArgumentException('Field name cannot be empty.');
         }
 
-        // Parse options first as they are the most distinctive.
-        if (preg_match('/^(.+?)\[([\w:,]+)\]$/', $name, $matches)) {
+        // Parse options if present (using [key:value,key2:value2] syntax)
+        if (preg_match('/^(.+?)\[([\w:,=]+)\]$/', $name, $matches)) {
             $name = $matches[1];
             $options = $this->parseOptions($matches[2]);
-
-            // Check if options contain join or alias.
-            if (isset($options['join'])) {
-                $joinType = strtolower($options['join']);
-                if (!in_array($joinType, self::VALID_JOIN_TYPES)) {
-                    throw new InvalidArgumentException(
-                        sprintf('Invalid join type: %s.', $joinType)
-                    );
-                }
-            }
-            if (isset($options['alias'])) {
-                $alias = $options['alias'];
-            }
-        }
-
-        // Support simple operator syntax if options not present.
-        if ($options === null) {
-            // Check for join type (+left, +inner, +cross, +right).
-            if (preg_match('/^(.+)\+(\w+)$/', $name, $matches)) {
-                $name = $matches[1];
-                if (str_contains($name, '+')) {
-                    throw new InvalidArgumentException(
-                        sprintf('Invalid name in join: %s.', $name)
-                    );
-                }
-                $joinType = strtolower($matches[2]);
-                if (!in_array($joinType, self::VALID_JOIN_TYPES)) {
-                    throw new InvalidArgumentException(
-                        sprintf('Invalid join type: %s.', $joinType)
-                    );
-                }
-            }
-
-            // Check for alias (:alias).
-            if (preg_match('/^(.+):(\w+)$/', $name, $matches)) {
-                $name = $matches[1];
-                if (str_contains($name, '+')) {
-                    throw new InvalidArgumentException(
-                        sprintf('Invalid name in join: %s.', $name)
-                    );
-                }
-                $alias = $matches[2];
-            }
         }
 
         // Validate the field name after removing all metadata.
-        // IMPORTANT: This will return a name that should be sanitized when
-        // building the query. Here we only validate that a name exists, but not
-        // that it is secure.
         if (empty($name)) {
             throw new InvalidArgumentException('Field name cannot be empty.');
         }
 
         // Basic check (not sanitization).
         if (preg_match('/^[^a-zA-Z0-9_]|[^a-zA-Z0-9_)_]$/', $name)) {
-            throw new InvalidArgumentException('Invalid characters found. Allowed at the beginning: letters, numbers, underscore. Allowed at the end: letters, numbers, underscore, closing parenthesis.');
+            throw new InvalidArgumentException(sprintf(
+                'Invalid characters found in segment name %s. Allowed at the beginning: letters, numbers, underscore. Allowed at the end: letters, numbers, underscore, closing parenthesis.',
+                $name
+            ));
         }
 
         return new Segment(
             name: $name,
-            joinType: $joinType,
-            alias: $alias,
             options: $options
         );
     }
@@ -156,8 +98,8 @@ final class PathParser implements PathParserInterface
     /**
      * Parses the options string into an associative array.
      *
-     * @param string $options The options string (e.g., "order:created_at,limit:10").
-     * @return array<string,string> The parsed options.
+     * @param string $options The options string (e.g., "key1:value1,key2:value2").
+     * @return array<string,mixed> The parsed options.
      * @throws InvalidArgumentException If options format is invalid.
      */
     private function parseOptions(string $options): array
@@ -166,12 +108,14 @@ final class PathParser implements PathParserInterface
         $pairs = explode(',', $options);
 
         foreach ($pairs as $pair) {
+            // Check if it contains a colon.
             if (!str_contains($pair, ':')) {
                 throw new InvalidArgumentException(
                     sprintf('Invalid option format: %s.', $pair)
                 );
             }
 
+            // Split at first colon to get key and value.
             [$key, $value] = explode(':', $pair, 2);
             $key = trim($key);
             $value = trim($value);
@@ -182,7 +126,29 @@ final class PathParser implements PathParserInterface
                 );
             }
 
-            $result[$key] = $value;
+            // Check if the value contains an equals sign.
+            if (str_contains($value, '=')) {
+                [$leftPart, $rightPart] = explode('=', $value, 2);
+                $leftPart = trim($leftPart);
+                $rightPart = trim($rightPart);
+
+                if (empty($leftPart) || empty($rightPart)) {
+                    throw new InvalidArgumentException(
+                        'Option parts around equals sign cannot be empty.'
+                    );
+                }
+
+                // For options with equals, create a nested array if not exists.
+                if (!isset($result[$key])) {
+                    $result[$key] = [];
+                }
+
+                // Store as key-value pair within the option.
+                $result[$key][$leftPart] = $rightPart;
+            } else {
+                // Simple option.
+                $result[$key] = $value;
+            }
         }
 
         return $result;

@@ -12,8 +12,6 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Functional\Filter;
 
-use Derafu\Query\Filter\Contract\PathInterface;
-use Derafu\Query\Filter\Contract\PathParserInterface;
 use Derafu\Query\Filter\Path;
 use Derafu\Query\Filter\PathParser;
 use Derafu\Query\Filter\Segment;
@@ -34,129 +32,133 @@ use PHPUnit\Framework\TestCase;
 final class PathParserTest extends TestCase
 {
     /**
-     * Instance of the parser being tested.
+     * Test parsing valid path expressions and comparing the results with
+     * expected values.
      */
-    private PathParserInterface $parser;
-
-    /**
-     * Sets up the test environment.
-     */
-    protected function setUp(): void
+    #[DataProvider('validPathProvider')]
+    public function testParseValidPath(string $expression, array $expected): void
     {
-        parent::setUp();
-        $this->parser = new PathParser();
-    }
+        $parser = new PathParser();
+        $path = $parser->parse($expression);
 
-    /**
-     * Data provider for parser tests.
-     *
-     * Provides test cases for both valid and invalid path expressions.
-     *
-     * @return array<string,array{string,string}> Test cases.
-     */
-    public static function parserCasesProvider(): array
-    {
-        $paths = require __DIR__ . '/../../../fixtures/functional/paths.php';
-
-        $cases = [];
-
-        // Process valid cases.
-        foreach ($paths['OK'] as $expression) {
-            $cases['Valid: ' . $expression] = [$expression, 'valid'];
-        }
-
-        // Process invalid cases.
-        foreach ($paths['FAIL'] as $expression) {
-            $cases['Invalid: ' . $expression] = [$expression, 'invalid'];
-        }
-
-        return $cases;
-    }
-
-    /**
-     * Tests path parsing with various expressions.
-     *
-     * @param string $expression The path expression to test.
-     * @param string $expectation Whether the case should be valid or invalid.
-     */
-    #[DataProvider('parserCasesProvider')]
-    public function testPathParsing(
-        string $expression,
-        string $expectation
-    ): void {
-        if ($expectation === 'invalid') {
-            $this->expectException(InvalidArgumentException::class);
-            $this->parser->parse($expression);
-        } else {
-            $path = $this->parser->parse($expression);
-            $this->assertInstanceOf(PathInterface::class, $path);
-            $this->validatePath($path, $expression);
-        }
-    }
-
-    /**
-     * Tests specific path components with expected values.
-     */
-    public function testSpecificPathComponents(): void
-    {
-        // Test join types.
-        $path = $this->parser->parse('author+left__books+inner__title');
-        $segments = $path->getSegments();
-        $this->assertSame('left', $segments[0]->getJoinType());
-        $this->assertSame('inner', $segments[1]->getJoinType());
-        $this->assertNull($segments[2]->getJoinType());
-
-        // Test aliases.
-        $path = $this->parser->parse('author:a__books:b__title');
-        $segments = $path->getSegments();
-        $this->assertSame('a', $segments[0]->getAlias());
-        $this->assertSame('b', $segments[1]->getAlias());
-        $this->assertNull($segments[2]->getAlias());
-
-        // Test options.
-        $path = $this->parser->parse('posts[order:created_at,limit:10]__comments');
-        $segments = $path->getSegments();
-        $this->assertSame(
-            ['order' => 'created_at', 'limit' => '10'],
-            $segments[0]->getOptions()
+        // Verify segment count.
+        $this->assertCount(
+            $expected['segments_count'],
+            $path->getSegments(),
+            "Path should have {$expected['segments_count']} segments"
         );
-        $this->assertNull($segments[1]->getOptions());
 
-        // Test complex combination.
-        $path = $this->parser->parse('author:a+left__books[order:title]');
+        // Verify segment names.
         $segments = $path->getSegments();
-        $this->assertSame('a', $segments[0]->getAlias());
-        $this->assertSame('left', $segments[0]->getJoinType());
-        $this->assertSame(['order' => 'title'], $segments[1]->getOptions());
+        foreach ($expected['segment_names'] as $index => $expectedName) {
+            $this->assertSame(
+                $expectedName,
+                $segments[$index]->getName(),
+                "Segment $index should have name '$expectedName'"
+            );
+        }
+
+        // Verify segment options.
+        foreach ($expected['segment_options'] as $index => $expectedOptions) {
+            $this->assertSame(
+                $expectedOptions,
+                $segments[$index]->getOptions(),
+                "Segment $index should have correct options"
+            );
+        }
     }
 
     /**
-     * Validates a parsed path matches its original expression.
+     * Test parsing invalid path expressions, which should throw exceptions.
      */
-    private function validatePath(PathInterface $path, string $expression): void
+    #[DataProvider('invalidPathProvider')]
+    public function testParseInvalidPath(string $expression): void
     {
-        $segments = $path->getSegments();
-        $parts = explode('__', $expression);
+        $parser = new PathParser();
 
-        $this->assertCount(count($parts), $segments);
+        $this->expectException(InvalidArgumentException::class);
+        $parser->parse($expression);
+    }
 
-        foreach ($segments as $index => $segment) {
-            $this->assertNotEmpty($segment->getName());
+    /**
+     * Provides valid path expressions and their expected parsing results.
+     */
+    public static function validPathProvider(): array
+    {
+        $fixtures = require __DIR__ . '/../../../fixtures/functional/paths.php';
+        $data = [];
 
-            if ($segment->getJoinType() !== null) {
-                $this->assertContains(
-                    $segment->getJoinType(),
-                    ['inner', 'left', 'cross', 'right']
+        foreach ($fixtures['OK'] as $index => $fixture) {
+            $data['Valid Path #' . $index . ':' . $fixture['expression']] = [
+                $fixture['expression'],
+                $fixture['expected'],
+            ];
+        }
+
+        return $data;
+    }
+
+    /**
+     * Provides invalid path expressions.
+     */
+    public static function invalidPathProvider(): array
+    {
+        $fixtures = require __DIR__ . '/../../../fixtures/functional/paths.php';
+        $data = [];
+
+        foreach ($fixtures['FAIL'] as $index => $fixture) {
+            $data['Invalid Path #' . $index . ':' . $fixture['expression']] = [
+                $fixture['expression'],
+            ];
+        }
+
+        return $data;
+    }
+
+    /**
+     * Test that the path converts back to a string correctly.
+     */
+    public function testPathToString(): void
+    {
+        $pathExpressions = [
+            'author__books__title',
+            'invoices[alias:i]__customers[on:customer_id=id]__name',
+            'orders__items[on:order_id=id,on:branch_id=branch_id]__product',
+        ];
+
+        $parser = new PathParser();
+
+        foreach ($pathExpressions as $expression) {
+            $path = $parser->parse($expression);
+            $regeneratedExpression = (string)$path;
+
+            // Note: The exact string form might vary due to option ordering,
+            // but re-parsing it should produce the same structure.
+            $reparsedPath = $parser->parse($regeneratedExpression);
+
+            // Compare the segment count.
+            $this->assertCount(
+                count($path->getSegments()),
+                $reparsedPath->getSegments(),
+                "Re-parsed path should have the same number of segments."
+            );
+
+            // Compare each segment.
+            $segments = $path->getSegments();
+            $reparsedSegments = $reparsedPath->getSegments();
+
+            foreach ($segments as $index => $segment) {
+                $this->assertSame(
+                    $segment->getName(),
+                    $reparsedSegments[$index]->getName(),
+                    "Segment $index name should match after re-parsing."
                 );
-            }
 
-            if ($segment->getOptions() !== null) {
-                $this->assertIsArray($segment->getOptions());
-                $this->assertNotEmpty($segment->getOptions());
-            }
-
-            if ($segment->getAlias() !== null) {
-                $this->assertMatchesRegularExpression('/^\w+$/', $segment->getAlias());
+                $this->assertSame(
+                    $segment->getOptions(),
+                    $reparsedSegments[$index]->getOptions(),
+                    "Segment $index options should match after re-parsing."
+                );
             }
         }
     }

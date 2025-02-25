@@ -39,27 +39,47 @@ final class Path implements PathInterface
     /**
      * {@inheritDoc}
      */
-    public function getColumn(): string
+    public function getSegments(): array
+    {
+        return $this->segments;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getFirstSegment(): SegmentInterface
+    {
+        return $this->segments[0];
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function getLastSegment(): SegmentInterface
     {
         $segments = $this->segments;
         $lastSegment = end($segments);
 
-        return $lastSegment->getName();
+        return $lastSegment;
     }
 
     /**
-     * {@inheritDoc}
+     * Convert path to its string representation.
+     *
+     * @return string
      */
-    public function getRelations(): array
+    public function __toString(): string
     {
-        return array_slice($this->segments, 0, -1);
-    }
+        if (empty($this->segments)) {
+            return '';
+        }
 
-    /**
-     * {@inheritDoc}
-     */
-    public function getSegments(): array
-    {
-        return $this->segments;
+        $parts = [];
+
+        foreach ($this->segments as $segment) {
+            $parts[] = (string)$segment;
+        }
+
+        return implode('__', $parts);
     }
 }

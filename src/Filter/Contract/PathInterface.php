@@ -12,29 +12,31 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Filter\Contract;
 
+use Stringable;
+
 /**
  * Represents a parsed relation path with its segments and metadata.
  */
-interface PathInterface
+interface PathInterface extends Stringable
 {
     /**
-     * Gets the target column (last segment).
+     * Gets all segments of the path.
      *
-     * @return string The name of the target column.
-     */
-    public function getColumn(): string;
-
-    /**
-     * Gets the relation segments (all segments except the last).
-     *
-     * @return array<SegmentInterface> The relation segments.
-     */
-    public function getRelations(): array;
-
-    /**
-     * Gets all segments including the target column.
-     *
-     * @return array<SegmentInterface> All path segments.
+     * @return SegmentInterface[] All path segments.
      */
     public function getSegments(): array;
+
+    /**
+     * Gets the first segment of the path.
+     *
+     * @return SegmentInterface The first segment.
+     */
+    public function getFirstSegment(): SegmentInterface;
+
+    /**
+     * Gets the last segment of the path.
+     *
+     * @return SegmentInterface The last segment.
+     */
+    public function getLastSegment(): SegmentInterface;
 }

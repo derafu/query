@@ -12,10 +12,12 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Filter\Contract;
 
+use Stringable;
+
 /**
  * Represents a single segment in a path with its metadata.
  */
-interface SegmentInterface
+interface SegmentInterface extends Stringable
 {
     /**
      * Gets the segment's base name without metadata.
@@ -25,23 +27,18 @@ interface SegmentInterface
     public function getName(): string;
 
     /**
-     * Gets the join type if specified.
-     *
-     * @return string|null The join type or null if not specified.
-     */
-    public function getJoinType(): ?string;
-
-    /**
-     * Gets the alias if specified.
-     *
-     * @return string|null The alias or null if not specified.
-     */
-    public function getAlias(): ?string;
-
-    /**
      * Gets the segment options if specified.
      *
-     * @return array<string,string>|null The options or null if not specified.
+     * @return array<string,string|array<string,string>>
      */
-    public function getOptions(): ?array;
+    public function getOptions(): array;
+
+    /**
+     * Gets an option from options list of the segment.
+     *
+     * @param string $key
+     * @param mixed $default
+     * @return mixed
+     */
+    public function getOption(string $key, mixed $default = null): mixed;
 }
