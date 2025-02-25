@@ -23,6 +23,7 @@ use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Contract\ExpressionParserInterface;
 use Derafu\Query\Filter\Contract\PathInterface;
+use InvalidArgumentException;
 use RuntimeException;
 
 /**
@@ -403,12 +404,24 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         ?string $alias = null
     ): self {
         if (!isset($this->joins[$table])) {
+            $type = strtoupper($type);
+            if (!in_array($type, ['INNER', 'LEFT', 'RIGHT', 'CROSS'])) {
+                throw new InvalidArgumentException(sprintf(
+                    'Invalid join type %s.',
+                    $type
+                ));
+            }
+
             $id = $table . ':' . ($alias ?? $table);
+
             $this->joins[$id] = [
-                'table' => $table,
-                'condition' => $condition,
-                'type' => strtoupper($type),
-                'alias' => $alias,
+                'table' => $this->sanitizeSqlSimpleIdentifier($table),
+                'condition' => $condition, // The condition is not sanitized, it must be safe!.
+                'type' => $type,
+                'alias' => $alias !== null
+                    ? $this->sanitizeSqlSimpleIdentifier($alias)
+                    : null
+                ,
             ];
         }
 

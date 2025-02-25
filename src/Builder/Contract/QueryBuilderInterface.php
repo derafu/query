@@ -168,6 +168,8 @@ interface QueryBuilderInterface
     /**
      * Joins another table to the query.
      *
+     * IMPORTANT: The condition is not sanitized, it must be safe!.
+     *
      * @param string $table The table to join.
      * @param string $condition The join condition.
      * @param string $type The join type (INNER, LEFT, RIGHT, etc).
@@ -184,6 +186,8 @@ interface QueryBuilderInterface
     /**
      * Adds a LEFT JOIN to the query.
      *
+     * IMPORTANT: The condition is not sanitized, it must be safe!.
+     *
      * @param string $table The table to join.
      * @param string $condition The join condition.
      * @param string|null $alias Optional alias for the joined table.
@@ -194,6 +198,8 @@ interface QueryBuilderInterface
     /**
      * Adds a RIGHT JOIN to the query.
      *
+     * IMPORTANT: The condition is not sanitized, it must be safe!.
+     *
      * @param string $table The table to join.
      * @param string $condition The join condition.
      * @param string|null $alias Optional alias for the joined table.
@@ -203,6 +209,8 @@ interface QueryBuilderInterface
 
     /**
      * Adds an INNER JOIN to the query.
+     *
+     * IMPORTANT: The condition is not sanitized, it must be safe!.
      *
      * @param string $table The table to join.
      * @param string $condition The join condition.
