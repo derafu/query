@@ -87,7 +87,8 @@ class SqliteIntegrationTest extends TestCase
 
         // Build query using ConfigQuery and the QueryBuilder, then execute.
         $config = new QueryConfig($query);
-        $actual = $config->applyTo($this->query->new())->execute();
+        $builder = $config->applyTo($this->query->new());
+        $actual = $builder->execute();
 
         // Compare results.
         $this->assertSame($expected, $actual, $description);

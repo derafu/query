@@ -72,33 +72,9 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         $path = $condition->getPath();
         $filter = $condition->getFilter();
 
-        // Get operator and value.
+        // Get operator and base operator if exists.
         $operator = $filter->getOperator();
         $baseOperator = $operator->getBaseOperator();
-
-        // Validate value against pattern if exists.
-        $value = $filter->getValue();
-        $pattern = $operator->getValidationPattern()
-            ?? $baseOperator?->getValidationPattern()
-        ;
-        if ($pattern !== null && $value !== null) {
-            if (!preg_match($pattern, $value)) {
-                throw new InvalidArgumentException(
-                    sprintf(
-                        'Invalid value format for operator %s: %s.',
-                        $operator->getSymbol(),
-                        $value
-                    )
-                );
-            }
-        }
-
-        // Normalize and cast value.
-        $value = $this->normalizeValue($value);
-        $value = $this->castValue(
-            $value,
-            (array)($operator->getCastingRules() ?: $baseOperator?->getCastingRules())
-        );
 
         // Get SQL template for the engine.
         $templates = $operator->get('sql') ?? $baseOperator?->get('sql');
@@ -118,11 +94,57 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
             );
         }
 
-        // Create parameters for the query.
-        $parameters = $this->createParameters(
-            $value,
-            $this->sanitizeSqlSimpleIdentifier($path->getLastSegment()->getName())
-        );
+        // Get value.
+        $value = $filter->getValue();
+
+        // If the condition is literal, process the filter value and create the
+        // parameters.
+        if ($condition->isLiteral()) {
+
+            // Validate value against pattern if exists.
+            $pattern = $operator->getValidationPattern()
+                ?? $baseOperator?->getValidationPattern()
+            ;
+            if ($pattern !== null && $value !== null) {
+                if (!preg_match($pattern, $value)) {
+                    throw new InvalidArgumentException(
+                        sprintf(
+                            'Invalid value format for operator %s: %s.',
+                            $operator->getSymbol(),
+                            $value
+                        )
+                    );
+                }
+            }
+
+            // Normalize and cast value.
+            $value = $this->normalizeValue($value);
+            $value = $this->castValue(
+                $value,
+                (array)($operator->getCastingRules() ?: $baseOperator?->getCastingRules())
+            );
+
+            // Create parameters for the query.
+            $parameters = $this->createParameters(
+                $value,
+                $this->sanitizeSqlSimpleIdentifier($path->getLastSegment()->getName())
+            );
+
+        }
+
+        // Si la condición no es literal se reemplaza el valor sanitizado en la
+        // plantilla SQL. No existen parámetros.
+        else {
+            if (str_contains($sql, '{{value}}')) {
+                $sql = str_replace(
+                    '{{value}}',
+                    $this->sanitizeSqlIdentifier($value),
+                    $sql
+                );
+            }
+
+            $parameters = [];
+        }
 
         // Build the WHERE clause.
         return new SqlQuery(...$this->createWhere(
@@ -361,9 +383,160 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
      */
     private function buildColumnFromPath(PathInterface $path): string
     {
-        // TODO: Handle joins and aliases.
-        $column = $path->getLastSegment()->getName();
+        $segments = $path->getSegments();
+        $lastSegment = end($segments);
+        $column = $lastSegment->getName();
+
+        // Check if the column is a function (has parentheses).
+        $isFunction = preg_match('/^([A-Za-z0-9_]+)\s*\((.*)\)$/', $column, $matches);
+
+        // If it's a function like AVG(price) or TO_CHAR(date, 'YYYY-MM-DD').
+        if ($isFunction) {
+            $functionName = $matches[1]; // For example, "AVG" or "TO_CHAR".
+            $functionArgs = $matches[2]; // For example, "price" or "date, 'YYYY-MM-DD'".
+
+            // If there are previous segments, we need to qualify the columns in
+            // the arguments.
+            if (count($segments) > 1) {
+                $parentIndex = count($segments) - 2;
+                $parent = $segments[$parentIndex];
+                $tablePrefix = $parent->getOption('alias') ?? $parent->getName();
+
+                // Split the arguments, respecting parentheses and quotes.
+                $args = $this->splitFunctionArguments($functionArgs);
+
+                // Qualify each argument if it appears to be a column name.
+                $qualifiedArgs = [];
+                foreach ($args as $arg) {
+                    $arg = trim($arg);
+
+                    // If the argument appears to be a column name (not a
+                    // literal or complex expression).
+                    if (!$this->isLiteralOrExpression($arg)) {
+                        $qualifiedArgs[] = $tablePrefix . '.' . $arg;
+                    } else {
+                        $qualifiedArgs[] = $arg;
+                    }
+                }
+
+                // Rebuild the function with qualified arguments.
+                $qualifiedColumn = $functionName . '(' . implode(', ', $qualifiedArgs) . ')';
+
+                return $this->sanitizeSqlIdentifier($qualifiedColumn);
+            }
+
+            // If there are no previous segments, use as is.
+            return $this->sanitizeSqlIdentifier($column);
+        }
+
+        // If it's not a function, proceed with the normal logic.
+        if (count($segments) > 1) {
+            $parentIndex = count($segments) - 2;
+            $parent = $segments[$parentIndex];
+            $tablePrefix = $parent->getOption('alias') ?? $parent->getName();
+            return $this->sanitizeSqlIdentifier($tablePrefix . '.' . $column);
+        }
 
         return $this->sanitizeSqlIdentifier($column);
+    }
+
+    /**
+     * Splits function arguments respecting nested parentheses and quotes.
+     *
+     * @param string $argsString The function arguments as a string.
+     * @return array<string> The separated arguments.
+     */
+    private function splitFunctionArguments(string $argsString): array
+    {
+        if (empty($argsString)) {
+            return [];
+        }
+
+        $args = [];
+        $current = '';
+        $parenCount = 0;
+        $inQuote = false;
+        $quoteChar = '';
+
+        for ($i = 0; $i < strlen($argsString); $i++) {
+            $char = $argsString[$i];
+
+            // Handle quotes.
+            if (($char === "'" || $char === '"') && ($i === 0 || $argsString[$i - 1] !== '\\')) {
+                if (!$inQuote) {
+                    $inQuote = true;
+                    $quoteChar = $char;
+                } elseif ($char === $quoteChar) {
+                    $inQuote = false;
+                }
+            }
+
+            // Handle parentheses.
+            if (!$inQuote) {
+                if ($char === '(') {
+                    $parenCount++;
+                } elseif ($char === ')') {
+                    $parenCount--;
+                }
+            }
+
+            // If we find a comma outside of quotes and parentheses, separate
+            // the argument.
+            if ($char === ',' && !$inQuote && $parenCount === 0) {
+                $args[] = $current;
+                $current = '';
+                continue;
+            }
+
+            $current .= $char;
+        }
+
+        // Add the last argument.
+        if (!empty($current)) {
+            $args[] = $current;
+        }
+
+        return $args;
+    }
+
+    /**
+     * Determines if a string is a literal or a complex expression.
+     *
+     * @param string $arg The argument to check.
+     * @return bool True if it's a literal or complex expression.
+     */
+    private function isLiteralOrExpression(string $arg): bool
+    {
+        // Single or double quotes indicate a string literal.
+        if (preg_match('/^[\'\"].*[\'\"]$/', $arg)) {
+            return true;
+        }
+
+        // Number (integer or decimal).
+        if (is_numeric($arg)) {
+            return true;
+        }
+
+        // Expressions with arithmetic operators.
+        if (preg_match('/[\+\-\*\/]/', $arg)) {
+            return true;
+        }
+
+        // Nested functions.
+        if (preg_match('/[a-zA-Z0-9_]+\s*\(.*\)/', $arg)) {
+            return true;
+        }
+
+        // Wildcards and special constants.
+        if (
+            $arg === '*'
+            || strtoupper($arg) === 'NULL'
+            || strtoupper($arg) === 'TRUE'
+            || strtoupper($arg) === 'FALSE'
+        ) {
+            return true;
+        }
+
+        return false;
     }
 }

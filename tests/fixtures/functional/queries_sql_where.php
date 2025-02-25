@@ -14,7 +14,7 @@ return [
     'cases' => [
         // Casos simples.
         [
-            'path' => 'author__name',
+            'path' => 'name',
             'filter' => '=john',
             'expected' => [
                 'sql' => 'name = :param_{id}',
@@ -22,18 +22,26 @@ return [
             ],
         ],
         [
-            'path' => 'author__books__title',
+            'path' => 'authors__name',
+            'filter' => '=john',
+            'expected' => [
+                'sql' => 'authors.name = :param_{id}',
+                'parameters' => ['param_{id}' => 'john'],
+            ],
+        ],
+        [
+            'path' => 'authors__books__title',
             'filter' => 'like:SQL book',
             'expected' => [
-                'sql' => 'title LIKE :param_{id}',
+                'sql' => 'books.title LIKE :param_{id}',
                 'parameters' => ['param_{id}' => 'SQL book'],
             ],
         ],
         [
-            'path' => 'author__books__price',
+            'path' => 'authors__books__price',
             'filter' => 'between:10,20',
             'expected' => [
-                'sql' => 'price BETWEEN :param_{id}_1 AND :param_{id}_2',
+                'sql' => 'books.price BETWEEN :param_{id}_1 AND :param_{id}_2',
                 'parameters' => [
                     'param_{id}_1' => '10',
                     'param_{id}_2' => '20',
@@ -41,10 +49,10 @@ return [
             ],
         ],
         [
-            'path' => 'author__books__title',
+            'path' => 'authors__books__title',
             'filter' => '~~*adventure',
             'expected' => [
-                'sql' => 'title ILIKE :param_{id}',
+                'sql' => 'books.title ILIKE :param_{id}',
                 'parameters' => ['param_{id}' => '%adventure%'],
             ],
         ],
@@ -55,7 +63,7 @@ return [
             'filter' => '~*hello',
             'engine' => 'mysql',
             'expected' => [
-                'sql' => 'title REGEXP :param_{id}',
+                'sql' => 'posts.title REGEXP :param_{id}',
                 'parameters' => ['param_{id}' => 'hello'],
             ],
         ],
@@ -150,7 +158,7 @@ return [
             'path' => 'products__price',
             'filter' => '>=100',
             'expected' => [
-                'sql' => 'price >= :param_{id}',
+                'sql' => 'products.price >= :param_{id}',
                 'parameters' => ['param_{id}' => '100'],
             ],
         ],
@@ -158,7 +166,7 @@ return [
             'path' => 'products__stock',
             'filter' => '<10',
             'expected' => [
-                'sql' => 'stock < :param_{id}',
+                'sql' => 'products.stock < :param_{id}',
                 'parameters' => ['param_{id}' => '10'],
             ],
         ],

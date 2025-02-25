@@ -226,14 +226,16 @@ class QueryConfig implements QueryConfigInterface
     /**
      * Validates that the configuration contains the minimum required elements.
      *
+     * For now, just validates emptiness.
+     *
      * @param array<string, mixed> $config The configuration to validate.
      * @throws InvalidArgumentException If the configuration is invalid.
      */
     private function validateConfiguration(array $config): void
     {
-        if (!isset($config['table'])) {
+        if (empty($config)) {
             throw new InvalidArgumentException(
-                'Missing required \'table\' key in query configuration.'
+                'Query configuration cannot be empty.'
             );
         }
     }

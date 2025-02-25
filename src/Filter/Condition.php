@@ -23,7 +23,8 @@ class Condition implements ConditionInterface
 {
     public function __construct(
         private readonly PathInterface $path,
-        private readonly FilterInterface $filter
+        private readonly FilterInterface $filter,
+        private readonly bool $literal = true
     ) {
     }
 
@@ -41,5 +42,13 @@ class Condition implements ConditionInterface
     public function getFilter(): FilterInterface
     {
         return $this->filter;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function isLiteral(): bool
+    {
+        return $this->literal;
     }
 }

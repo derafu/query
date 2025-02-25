@@ -30,4 +30,12 @@ interface ConditionInterface
      * @return FilterInterface
      */
     public function getFilter(): FilterInterface;
+
+    /**
+     * Indicates whether the filter value is for a literal condition or is a
+     * value representing an identifier or expression.
+     *
+     * @return bool
+     */
+    public function isLiteral(): bool;
 }

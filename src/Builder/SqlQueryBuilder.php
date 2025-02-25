@@ -22,6 +22,7 @@ use Derafu\Query\Filter\CompositeCondition;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Contract\ExpressionParserInterface;
+use Derafu\Query\Filter\Contract\PathInterface;
 use RuntimeException;
 
 /**
@@ -107,9 +108,9 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     /**
      * Join clauses for the query.
      *
-     * @var array<array{table: string, condition: string|null, type: string, alias: string|null}>|null
+     * @var array<string,array{table: string, condition: string|null, type: string, alias: string|null}>
      */
-    private ?array $joins = null;
+    private array $joins = [];
 
     /**
      * Create a new SQL Query Builder.
@@ -401,12 +402,15 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         string $type = 'INNER',
         ?string $alias = null
     ): self {
-        $this->joins[] = [
-            'table' => $table,
-            'condition' => $condition,
-            'type' => strtoupper($type),
-            'alias' => $alias,
-        ];
+        if (!isset($this->joins[$table])) {
+            $id = $table . ':' . ($alias ?? $table);
+            $this->joins[$id] = [
+                'table' => $table,
+                'condition' => $condition,
+                'type' => strtoupper($type),
+                'alias' => $alias,
+            ];
+        }
 
         return $this;
     }
@@ -448,6 +452,9 @@ final class SqlQueryBuilder implements QueryBuilderInterface
      */
     public function getQuery(): QueryInterface
     {
+        // Process paths, get base table and apply joins if they exist.
+        $this->processPathsForFrom();
+
         if (!isset($this->table)) {
             throw new RuntimeException('No table specified for query.');
         }
@@ -466,7 +473,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         }
 
         // Build JOIN clauses.
-        if (isset($this->joins) && !empty($this->joins)) {
+        if (!empty($this->joins)) {
             foreach ($this->joins as $join) {
                 $sql .= ' ' . $join['type'] . ' JOIN ' . $join['table'];
                 if ($join['alias']) {
@@ -579,6 +586,147 @@ final class SqlQueryBuilder implements QueryBuilderInterface
                     $composite->add($this->expressionParser->parse($condition));
                 }
             }
+        }
+    }
+
+    /**
+     * Processes all query conditions to extract paths, detect the base table
+     * and apply joins.
+     */
+    private function processPathsForFrom(): void
+    {
+        if (!isset($this->where)) {
+            return;
+        }
+
+        // Extract all paths from conditions.
+        $paths = $this->extractPathsFromConditions($this->where);
+
+        // If there is no table defined yet and there are paths, use the table
+        // from the first path if at least two segments exists.
+        if (!isset($this->table) && !empty($paths)) {
+            $firstPath = reset($paths);
+            $segments = $firstPath->getSegments();
+            if (isset($segments[1])) {
+                $firstSegment = $segments[0];
+
+                $this->from(
+                    $firstSegment->getName(),
+                    $firstSegment->getOption('alias')
+                );
+            }
+        }
+
+        // Apply joins to all routes.
+        foreach ($paths as $path) {
+            $this->applyJoinsFromPath($path);
+        }
+    }
+
+    /**
+     * Extracts all paths from a condition or compound condition.
+     *
+     * @param ConditionInterface|CompositeConditionInterface $condition
+     * @return array<PathInterface>
+     */
+    private function extractPathsFromConditions($condition): array
+    {
+        $paths = [];
+
+        if ($condition instanceof ConditionInterface) {
+            $paths[] = $condition->getPath();
+        } else {
+            // It is a compound condition, process recursively.
+            foreach ($condition->getConditions() as $subCondition) {
+                $paths = array_merge(
+                    $paths,
+                    $this->extractPathsFromConditions($subCondition)
+                );
+            }
+        }
+
+        return $paths;
+    }
+
+    /**
+     * Applies joins based on a path.
+     *
+     * @param PathInterface $path
+     */
+    private function applyJoinsFromPath(PathInterface $path): void
+    {
+        $segments = $path->getSegments();
+
+        // If there is only one segment, there are no joins to make.
+        if (count($segments) <= 1) {
+            return;
+        }
+
+        // The first segment should be the base table.
+        $baseSegment = $segments[0];
+        $baseTable = $baseSegment->getName();
+        $baseAlias = $baseSegment->getOption('alias');
+
+        // Check that it matches the current table.
+        // If the base table of the path does not match the one in the query, it
+        // is not appropriate to process the paths as JOINS (because it is not
+        // appropriate or because the query is malformed).
+        if ($this->table !== $baseTable) {
+            return;
+        }
+
+        // Process intermediate segments (excluding the first and last).
+        $previousTable = $baseTable;
+        $previousAlias = $baseAlias;
+
+        for ($i = 1; $i < count($segments) - 1; $i++) {
+            $segment = $segments[$i];
+            $targetTable = $segment->getName();
+            $targetAlias = $segment->getOption('alias');
+
+            // Determine join type.
+            $joinType = strtoupper($segment->getOption('join', 'INNER'));
+
+            // Check join conditions.
+            $joinConditions = $segment->getOption('on');
+            if ($joinConditions) {
+                $joinConditionParts = [];
+
+                foreach ($joinConditions as $sourceCol => $targetCol) {
+                    $sourceRef = $previousAlias ?? $previousTable;
+                    $targetRef = $targetAlias ?? $targetTable;
+
+                    $joinConditionParts[] = sprintf(
+                        '%s.%s = %s.%s',
+                        $this->sanitizeSqlSimpleIdentifier($sourceRef),
+                        $this->sanitizeSqlSimpleIdentifier($sourceCol),
+                        $this->sanitizeSqlSimpleIdentifier($targetRef),
+                        $this->sanitizeSqlSimpleIdentifier($targetCol)
+                    );
+                }
+
+                $joinCondition = implode(' AND ', $joinConditionParts);
+
+                // Apply the join.
+                switch ($joinType) {
+                    case 'LEFT':
+                        $this->leftJoin($targetTable, $joinCondition, $targetAlias);
+                        break;
+                    case 'RIGHT':
+                        $this->rightJoin($targetTable, $joinCondition, $targetAlias);
+                        break;
+                    case 'CROSS':
+                        $this->crossJoin($targetTable, $targetAlias);
+                        break;
+                    case 'INNER':
+                    default:
+                        $this->innerJoin($targetTable, $joinCondition, $targetAlias);
+                        break;
+                }
+            }
+
+            $previousTable = $targetTable;
+            $previousAlias = $targetAlias;
         }
     }
 }

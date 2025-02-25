@@ -40,11 +40,23 @@ class ExpressionParser implements ExpressionParserInterface
      */
     public function parse(string $expression): ConditionInterface
     {
-        [$pathExpression, $filterExpression] = explode('?', $expression, 2);
+        // Determine whether the expression has a filter whose value is another
+        // expression.
+        $pos = strpos($expression, '?E');
+        if ($pos !== false) {
+            $literalCondition = false;
+            if ($pos !== false) {
+                $expression = substr_replace($expression, '?', $pos, 2);
+            }
+        } else {
+            $literalCondition = true;
+        }
 
+        // Process the expression and generate path and filter.
+        [$pathExpression, $filterExpression] = explode('?', $expression, 2);
         $path = $this->pathParser->parse($pathExpression);
         $filter = $this->filterParser->parse($filterExpression);
 
-        return new Condition($path, $filter);
+        return new Condition($path, $filter, $literalCondition);
     }
 }
