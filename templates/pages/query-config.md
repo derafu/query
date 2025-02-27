@@ -1,4 +1,4 @@
-## Declarative Query Configuration
+# Declarative Query Configuration
 
 Beyond the fluent interface, Derafu\Query provides a powerful configuration-based approach to defining queries through the `QueryConfig` class:
 
@@ -125,5 +125,7 @@ $config = new QueryConfig([
     'offset' => 40,
 ]);
 ```
+
+---
 
 This declarative approach complements the fluent interface, giving you flexibility in how you define and manage your queries.

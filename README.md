@@ -253,8 +253,8 @@ Derafu\Query includes a wide range of operator types:
 
 ## Contributing
 
-Contributions are welcome! Feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
 ## License
 
-This library is licensed under the MIT License. See the `LICENSE` file for more details.
+This package is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

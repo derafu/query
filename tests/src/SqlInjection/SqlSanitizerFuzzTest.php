@@ -62,7 +62,7 @@ class SqlSanitizerFuzzTest extends TestCase
             }
 
             $input = implode('.', $parts);
-            $output = $this->sanitizer->sanitize($input);
+            $output = $this->sanitizer->sanitizeSimple($input);
 
             // Qualified identifiers should be dot-separated alphanumeric identifiers.
             $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)*$/', $output);
