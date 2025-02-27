@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Derafu: Query - Expressive Path-Based Query Builder for PHP</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.0/css/all.min.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/themes/prism.min.css" rel="stylesheet" />
+    <link href="https://derafu.org/foundation/css/styles.min.css" rel="stylesheet" />
+    </head>
+<body class="derafu-theme-earthstone">
+                <div id="header-container" class="sticky-top"></div>
+    
+            <div class="container">
+            <div class="row">
+                <main class="col-md-9">
+                    <div class="container py-4">
+    <div class="markdown-body"><h1><a id="content-declarative-query-configuration" href="query-config.html#content-declarative-query-configuration" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Declarative Query Configuration</h1>
+<p>Beyond the fluent interface, Derafu\Query provides a powerful configuration-based approach to defining queries through the <code>QueryConfig</code> class:</p>
+<pre><code class="language-php">use Derafu\Query\Config\QueryConfig;
+
+// Define a query using an array configuration.
+$config = new QueryConfig([
+    'table' =&gt; 'products',
+    'select' =&gt; 'id, name, price',
+    'where' =&gt; 'category?=electronics',
+    'orderBy' =&gt; ['price' =&gt; 'DESC'],
+    'limit' =&gt; 10,
+]);
+
+// Apply the configuration to a query builder.
+$result = $config-&gt;applyTo($queryBuilder)-&gt;execute();
+</code></pre>
+<p>This declarative approach offers several advantages.</p>
+<h3><a id="content-configuration-from-multiple-sources" href="query-config.html#content-configuration-from-multiple-sources" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Configuration from Multiple Sources</h3>
+<p>Load query definitions from various formats:</p>
+<pre><code class="language-php">// From YAML files.
+$config = QueryConfig::fromYamlFile('queries/product_report.yaml');
+
+// From JSON files.
+$config = QueryConfig::fromJsonFile('queries/sales_analysis.json');
+
+// From strings.
+$config = QueryConfig::fromYamlString($yamlContent);
+$config = QueryConfig::fromJsonString($jsonContent);
+
+// With automatic format detection.
+$config = QueryConfig::fromFile('queries/user_stats.yaml');
+</code></pre>
+<h3><a id="content-api-driven-queries" href="query-config.html#content-api-driven-queries" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>API-Driven Queries</h3>
+<p>This approach is particularly useful for building dynamic queries from API requests:</p>
+<pre><code class="language-php">// Receive a query definition from an API request.
+$requestData = $request-&gt;getJsonBody();
+
+// Create a secure query from the request data.
+$config = new QueryConfig([
+    'table' =&gt; 'products',
+    'where' =&gt; $requestData['filters'] ?? [],
+    'orderBy' =&gt; $requestData['sort'] ?? ['id' =&gt; 'ASC'],
+    'limit' =&gt; min($requestData['limit'] ?? 20, 100),
+    'offset' =&gt; $requestData['offset'] ?? 0,
+]);
+
+// Execute the query.
+$result = $config-&gt;applyTo($queryBuilder)-&gt;execute();
+</code></pre>
+<h3><a id="content-reusable-query-templates" href="query-config.html#content-reusable-query-templates" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Reusable Query Templates</h3>
+<p>Store common query patterns as configuration files:</p>
+<pre><code class="language-yaml"># recent_products.yaml
+table: products
+select: id, name, price, created_at
+where: deleted_at?is:null
+orderBy:
+    created_at: DESC
+limit: 20
+</code></pre>
+<pre><code class="language-php">// Load and customize the template.
+$config = QueryConfig::fromYamlFile('templates/recent_products.yaml');
+$builder = $config-&gt;applyTo($queryBuilder);
+
+// Add additional conditions.
+if ($category) {
+    $builder-&gt;andWhere('category?=' . $category);
+}
+
+$result = $builder-&gt;execute();
+</code></pre>
+<h3><a id="content-complete-configuration-options" href="query-config.html#content-complete-configuration-options" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Complete Configuration Options</h3>
+<p>The configuration supports all query builder features:</p>
+<pre><code class="language-php">$config = new QueryConfig([
+    // Basic query parts.
+    'table' =&gt; 'invoices',
+    'alias' =&gt; 'i',
+    'select' =&gt; 'i.id, i.number, c.name AS customer_name',
+    'distinct' =&gt; true,
+
+    // WHERE conditions.
+    'where' =&gt; 'i.status?=paid',
+    'andWhere' =&gt; 'i.total?&gt;1000',
+    'orWhere' =&gt; 'i.date?period:202403',
+    'andWhereOr' =&gt; [
+        ['i.category?=service', 'i.total?&gt;500'],
+        ['i.category?=product', 'i.total?&gt;1000'],
+    ],
+
+    // JOINs.
+    'innerJoin' =&gt; [
+        'table' =&gt; 'customers',
+        'alias' =&gt; 'c',
+        'condition' =&gt; 'i.customer_id = c.id',
+    ],
+
+    // Grouping &amp; sorting.
+    'groupBy' =&gt; ['i.status'],
+    'having' =&gt; 'COUNT(*)?&gt;1',
+    'orderBy' =&gt; ['i.created_at' =&gt; 'DESC'],
+
+    // Pagination.
+    'limit' =&gt; 20,
+    'offset' =&gt; 40,
+]);
+</code></pre>
+<hr />
+<p>This declarative approach complements the fluent interface, giving you flexibility in how you define and manage your queries.</p>
+</div>
+</div>
+                </main>
+                <div class="col-md-2 py-4">
+                    <div class="list-group mb-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                              <div class="fw-bold">Package Info</div>
+                              <span class="smal text-muted">derafu/query</span>
+                            </div>
+                        </li>
+                        <a href="index.html" class="list-group-item list-group-item-action ">
+                            README
+                        </a>
+                    </div>
+                    <div class="list-group mb-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                            <div class="fw-bold">Docs</div>
+                            <span class="smal text-muted">Guides & Examples</span>
+                            </div>
+                        </li>
+                        <a href="query-config.html" class="list-group-item list-group-item-action active">
+                            Declarative Query Configuration
+                        </a>
+                        <a href="security-guide_en.html" class="list-group-item list-group-item-action ">
+                            Security Guide
+                        </a>
+                        <a href="security-guide_es.html" class="list-group-item list-group-item-action ">
+                            Guía de Seguridad
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+            <div id="footer-container"></div>
+<script src="https://derafu.org/foundation/js/derafu.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    </body>
+</html>

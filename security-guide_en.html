@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Derafu: Query - Expressive Path-Based Query Builder for PHP</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.0/css/all.min.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/themes/prism.min.css" rel="stylesheet" />
+    <link href="https://derafu.org/foundation/css/styles.min.css" rel="stylesheet" />
+    </head>
+<body class="derafu-theme-earthstone">
+                <div id="header-container" class="sticky-top"></div>
+    
+            <div class="container">
+            <div class="row">
+                <main class="col-md-9">
+                    <div class="container py-4">
+    <div class="markdown-body"><h1><a id="content-security-guide-for-sqlsanitizertrait" href="security-guide_en.html#content-security-guide-for-sqlsanitizertrait" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Security Guide for SqlSanitizerTrait</h1>
+<p>This document provides guidelines on the secure use of <code>SqlSanitizerTrait</code> to prevent SQL injections.</p>
+<h2><a id="content-basic-principles" href="security-guide_en.html#content-basic-principles" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Basic Principles</h2>
+<p>The <code>SqlSanitizerTrait</code> is designed to sanitize SQL identifiers (table names, columns, etc.) and SQL expressions of medium complexity. Although it provides protection against many forms of SQL injection, it’s important to understand its limitations and use cases.</p>
+<h2><a id="content-safe-usage" href="security-guide_en.html#content-safe-usage" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Safe Usage</h2>
+<h3><a id="content--recommended-use-cases" href="security-guide_en.html#content--recommended-use-cases" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>✅ Recommended Use Cases</h3>
+<ul>
+<li>
+<p><strong>Column and Table Names</strong>:</p>
+<pre><code class="language-php">$query-&gt;select('column_name');
+</code></pre>
+</li>
+<li>
+<p><strong>Qualified Columns</strong>:</p>
+<pre><code class="language-php">$query-&gt;select('table.column');
+</code></pre>
+</li>
+<li>
+<p><strong>Expressions with Aliases</strong>:</p>
+<pre><code class="language-php">$query-&gt;select('column AS alias');
+</code></pre>
+</li>
+<li>
+<p><strong>Standard Aggregation Functions</strong>:</p>
+<pre><code class="language-php">$query-&gt;select('COUNT(*) AS total');
+</code></pre>
+</li>
+</ul>
+<h3><a id="content-️-cases-requiring-special-attention" href="security-guide_en.html#content-️-cases-requiring-special-attention" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>⚠️ Cases Requiring Special Attention</h3>
+<ul>
+<li>
+<p><strong>Complex SQL Functions</strong>: Ensure that arguments are properly sanitized.</p>
+<pre><code class="language-php">$query-&gt;select('COALESCE(column1, column2, 0) AS result');
+</code></pre>
+</li>
+<li>
+<p><strong>Expressions with Arithmetic Operators</strong>: May work but verify the results.</p>
+<pre><code class="language-php">$query-&gt;select('price * quantity AS total');
+</code></pre>
+</li>
+</ul>
+<h2><a id="content-specific-prevention-of-sql-injections" href="security-guide_en.html#content-specific-prevention-of-sql-injections" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Specific Prevention of SQL Injections</h2>
+<p>The sanitizer cannot guarantee absolute security if dynamic SQL is executed with concatenation instead of prepared statements.</p>
+<h3><a id="content-parameters-vs-identifiers" href="security-guide_en.html#content-parameters-vs-identifiers" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Parameters vs. Identifiers</h3>
+<p>It’s important to understand the distinction:</p>
+<ul>
+<li><strong>Parameters</strong> (values): Must be passed through prepared statements, not sanitized with this trait.</li>
+<li><strong>Identifiers</strong> (column/table names): Should be sanitized with this trait.</li>
+</ul>
+<h2><a id="content-additional-best-practices" href="security-guide_en.html#content-additional-best-practices" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Additional Best Practices</h2>
+<ol>
+<li><strong>Apply the principle of least privilege</strong> for database connections.</li>
+<li><strong>Use whitelists</strong> for valid column and table names.</li>
+<li><strong>Keep database components updated</strong>.</li>
+<li><strong>Log and monitor</strong> unusual queries or database errors.</li>
+<li><strong>Regularly test</strong> with security scanning tools.</li>
+</ol>
+</div>
+</div>
+                </main>
+                <div class="col-md-2 py-4">
+                    <div class="list-group mb-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                              <div class="fw-bold">Package Info</div>
+                              <span class="smal text-muted">derafu/query</span>
+                            </div>
+                        </li>
+                        <a href="index.html" class="list-group-item list-group-item-action ">
+                            README
+                        </a>
+                    </div>
+                    <div class="list-group mb-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                            <div class="fw-bold">Docs</div>
+                            <span class="smal text-muted">Guides & Examples</span>
+                            </div>
+                        </li>
+                        <a href="query-config.html" class="list-group-item list-group-item-action ">
+                            Declarative Query Configuration
+                        </a>
+                        <a href="security-guide_en.html" class="list-group-item list-group-item-action active">
+                            Security Guide
+                        </a>
+                        <a href="security-guide_es.html" class="list-group-item list-group-item-action ">
+                            Guía de Seguridad
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+            <div id="footer-container"></div>
+<script src="https://derafu.org/foundation/js/derafu.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    </body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Derafu: Query - Expressive Path-Based Query Builder for PHP</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.0/css/all.min.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/themes/prism.min.css" rel="stylesheet" />
+    <link href="https://derafu.org/foundation/css/styles.min.css" rel="stylesheet" />
+    </head>
+<body class="derafu-theme-earthstone">
+                <div id="header-container" class="sticky-top"></div>
+    
+            <div class="container">
+            <div class="row">
+                <main class="col-md-9">
+                    <div class="container py-4">
+    <div class="markdown-body"><h1><a id="content-guía-de-seguridad-para-sqlsanitizertrait" href="security-guide_es.html#content-guía-de-seguridad-para-sqlsanitizertrait" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Guía de seguridad para SqlSanitizerTrait</h1>
+<p>Este documento proporciona directrices sobre el uso seguro del <code>SqlSanitizerTrait</code> para prevenir inyecciones SQL.</p>
+<h2><a id="content-principios-básicos" href="security-guide_es.html#content-principios-básicos" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Principios básicos</h2>
+<p>El trait <code>SqlSanitizerTrait</code> está diseñado para sanitizar identificadores SQL (nombres de tablas, columnas, etc.) y expresiones SQL de mediana complejidad. Aunque proporciona protección contra muchas formas de inyección SQL, es importante entender sus límites y casos de uso.</p>
+<h2><a id="content-uso-seguro" href="security-guide_es.html#content-uso-seguro" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Uso seguro</h2>
+<h3><a id="content--casos-de-uso-recomendados" href="security-guide_es.html#content--casos-de-uso-recomendados" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>✅ Casos de uso recomendados</h3>
+<ul>
+<li>
+<p><strong>Nombres de columnas y tablas</strong>:</p>
+<pre><code class="language-php">$query-&gt;select('column_name');
+</code></pre>
+</li>
+<li>
+<p><strong>Columnas calificadas</strong>:</p>
+<pre><code class="language-php">$query-&gt;select('table.column');
+</code></pre>
+</li>
+<li>
+<p><strong>Expresiones con alias</strong>:</p>
+<pre><code class="language-php">$query-&gt;select('column AS alias');
+</code></pre>
+</li>
+<li>
+<p><strong>Funciones de agregación estándar</strong>:</p>
+<pre><code class="language-php">$query-&gt;select('COUNT(*) AS total');
+</code></pre>
+</li>
+</ul>
+<h3><a id="content-️-casos-que-requieren-especial-atención" href="security-guide_es.html#content-️-casos-que-requieren-especial-atención" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>⚠️ Casos que requieren especial atención</h3>
+<ul>
+<li>
+<p><strong>Funciones SQL complejas</strong>: Asegúrate de que los argumentos están correctamente sanitizados.</p>
+<pre><code class="language-php">$query-&gt;select('COALESCE(column1, column2, 0) AS result');
+</code></pre>
+</li>
+<li>
+<p><strong>Expresiones con operadores aritméticos</strong>: Pueden funcionar pero verifica los resultados.</p>
+<pre><code class="language-php">$query-&gt;select('price * quantity AS total');
+</code></pre>
+</li>
+</ul>
+<h2><a id="content-prevención-específica-de-inyecciones-sql" href="security-guide_es.html#content-prevención-específica-de-inyecciones-sql" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Prevención específica de inyecciones SQL</h2>
+<p>El sanitizador no puede garantizar seguridad absoluta si se ejecuta SQL dinámico con concatenación en lugar de parámetros preparados.</p>
+<h3><a id="content-parámetros-vs-identificadores" href="security-guide_es.html#content-parámetros-vs-identificadores" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Parámetros vs. Identificadores</h3>
+<p>Es importante entender la distinción:</p>
+<ul>
+<li><strong>Parámetros</strong> (valores): Deben ser pasados a través de parámetros preparados, no sanitizados con este trait.</li>
+<li><strong>Identificadores</strong> (nombres de columnas/tablas): Deben ser sanitizados con este trait.</li>
+</ul>
+<h2><a id="content-buenas-prácticas-adicionales" href="security-guide_es.html#content-buenas-prácticas-adicionales" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Buenas prácticas adicionales</h2>
+<ol>
+<li><strong>Emplea el principio de mínimo privilegio</strong> para las conexiones a base de datos.</li>
+<li><strong>Utiliza listas blancas</strong> para nombres de columnas y tablas válidos.</li>
+<li><strong>Mantén actualizados</strong> los componentes de base de datos.</li>
+<li><strong>Registra y monitoriza</strong> consultas inusuales o errores de base de datos.</li>
+<li><strong>Prueba regularmente</strong> con herramientas de escaneo de seguridad.</li>
+</ol>
+</div>
+</div>
+                </main>
+                <div class="col-md-2 py-4">
+                    <div class="list-group mb-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                              <div class="fw-bold">Package Info</div>
+                              <span class="smal text-muted">derafu/query</span>
+                            </div>
+                        </li>
+                        <a href="index.html" class="list-group-item list-group-item-action ">
+                            README
+                        </a>
+                    </div>
+                    <div class="list-group mb-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                            <div class="fw-bold">Docs</div>
+                            <span class="smal text-muted">Guides & Examples</span>
+                            </div>
+                        </li>
+                        <a href="query-config.html" class="list-group-item list-group-item-action ">
+                            Declarative Query Configuration
+                        </a>
+                        <a href="security-guide_en.html" class="list-group-item list-group-item-action ">
+                            Security Guide
+                        </a>
+                        <a href="security-guide_es.html" class="list-group-item list-group-item-action active">
+                            Guía de Seguridad
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+            <div id="footer-container"></div>
+<script src="https://derafu.org/foundation/js/derafu.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    </body>
+</html>
