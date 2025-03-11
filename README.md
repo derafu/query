@@ -1,7 +1,11 @@
 # Derafu: Query - Expressive Path-Based Query Builder for PHP
 
-[![CI Workflow](https://github.com/derafu/query/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/derafu/query/actions/workflows/ci.yml?query=branch%3Amain)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+![GitHub last commit](https://img.shields.io/github/last-commit/derafu/query/main)
+![CI Workflow](https://github.com/derafu/query/actions/workflows/ci.yml/badge.svg?branch=main&event=push)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/derafu/query)
+![GitHub Issues](https://img.shields.io/github/issues-raw/derafu/query)
+![Total Downloads](https://poser.pugx.org/derafu/query/downloads)
+![Monthly Downloads](https://poser.pugx.org/derafu/query/d/monthly)
 
 A flexible, intuitive PHP query builder that uses path expressions and configurable operators to simplify complex database queries and relationships.
 
