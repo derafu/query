@@ -5,12 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Derafu: Query - Expressive Path-Based Query Builder for PHP</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.0/css/all.min.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.0/css/all.min.css" rel="stylesheet" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.1.0/github-markdown-light.min.css" rel="stylesheet" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/themes/prism.min.css" rel="stylesheet" />
-    <link href="https://derafu.org/foundation/css/styles.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/command-line/prism-command-line.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/match-braces/prism-match-braces.min.css" rel="stylesheet" />
+    <link href="https://derafu.org/css/styles.min.css" rel="stylesheet" />
     </head>
-<body class="derafu-theme-earthstone">
+<body>
                 <div id="header-container" class="sticky-top"></div>
     
             <div class="container">
@@ -18,8 +21,12 @@
                 <main class="col-md-9">
                     <div class="container py-4">
     <div class="markdown-body"><h1><a id="content-derafu-query---expressive-path-based-query-builder-for-php" href="index.html#content-derafu-query---expressive-path-based-query-builder-for-php" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Derafu: Query - Expressive Path-Based Query Builder for PHP</h1>
-<p><a rel="nofollow noopener noreferrer" target="_blank" class="external-link" href="https://github.com/derafu/query/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/derafu/query/actions/workflows/ci.yml/badge.svg?branch=main&amp;event=push" alt="CI Workflow" /></a>
-<a rel="nofollow noopener noreferrer" target="_blank" class="external-link" href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" /></a></p>
+<p><img src="https://img.shields.io/github/last-commit/derafu/query/main" alt="GitHub last commit" />
+<img src="https://github.com/derafu/query/actions/workflows/ci.yml/badge.svg?branch=main&amp;event=push" alt="CI Workflow" />
+<img src="https://img.shields.io/github/languages/code-size/derafu/query" alt="GitHub code size in bytes" />
+<img src="https://img.shields.io/github/issues-raw/derafu/query" alt="GitHub Issues" />
+<img src="https://poser.pugx.org/derafu/query/downloads" alt="Total Downloads" />
+<img src="https://poser.pugx.org/derafu/query/d/monthly" alt="Monthly Downloads" /></p>
 <p>A flexible, intuitive PHP query builder that uses path expressions and configurable operators to simplify complex database queries and relationships.</p>
 <h2><a id="content-why-derafuquery" href="index.html#content-why-derafuquery" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Why Derafu\Query?</h2>
 <h3><a id="content--intuitive-relationship-navigation" href="index.html#content--intuitive-relationship-navigation" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>🚀 <strong>Intuitive Relationship Navigation</strong></h3>
@@ -92,10 +99,10 @@
 <hr />
 <h2><a id="content-installation" href="index.html#content-installation" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Installation</h2>
 <p>Install via Composer:</p>
-<pre><code class="language-bash">composer require derafu/query
+<pre><code class="line-numbers match-braces language-bash">composer require derafu/query
 </code></pre>
 <h2><a id="content-basic-usage" href="index.html#content-basic-usage" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Basic Usage</h2>
-<pre><code class="language-php">use Derafu\Query\Builder\SqlQueryBuilder;
+<pre><code class="line-numbers match-braces language-php">use Derafu\Query\Builder\SqlQueryBuilder;
 
 // Create a query builder.
 $queryBuilder = new SqlQueryBuilder($engine, $expressionParser);
@@ -108,7 +115,7 @@ $result = $queryBuilder
 </code></pre>
 <h2><a id="content-path-based-relationships" href="index.html#content-path-based-relationships" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Path-Based Relationships</h2>
 <p>One of the most powerful features of Derafu\Query is the ability to express relationships through paths:</p>
-<pre><code class="language-php">// Find invoices with customer information.
+<pre><code class="line-numbers match-braces language-php">// Find invoices with customer information.
 $result = $queryBuilder
     -&gt;where('invoices[alias:i]__customers[on:customer_id=id,alias:c]__name?isnot:null')
     -&gt;execute();
@@ -116,12 +123,12 @@ $result = $queryBuilder
 <p>The path syntax makes it clear which tables are being joined and on what conditions, all in a single expression.</p>
 <p>The main advantage of this syntax is that it can be provided to end users in a simplified version that the backend later completes with the missing data to build filters. This is especially useful for filtering table listings through their columns.</p>
 <p>The simplified filtering example in the invoices table seen above would look like this in the frontend:</p>
-<pre><code>name?isnot:null
+<pre><code class="line-numbers match-braces">name?isnot:null
 </code></pre>
 <p>With this filter applied to the invoices table on the customers table, the backend will complete the path with the current table (<code>invoices</code>) and the data for the join (<code>customers</code> and <code>customer_id=id</code>). This allows end users to easily write advanced filters across related tables.</p>
 <h2><a id="content-rich-operator-system" href="index.html#content-rich-operator-system" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Rich Operator System</h2>
 <p>Derafu\Query includes a comprehensive set of operators for filtering data:</p>
-<pre><code class="language-php">// Standard comparison operators.
+<pre><code class="line-numbers match-braces language-php">// Standard comparison operators.
 $queryBuilder-&gt;where('price?&gt;500');                      // Greater than.
 $queryBuilder-&gt;where('status?=active');                  // Equals.
 
@@ -153,7 +160,7 @@ $queryBuilder-&gt;where('flags?b&amp;1');                       // Bitwise AND.
 </code></pre>
 <h2><a id="content-configurable-operators" href="index.html#content-configurable-operators" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Configurable Operators</h2>
 <p>All operators are defined in a YAML configuration file, making it easy to extend or customize:</p>
-<pre><code class="language-yaml">operators:
+<pre><code class="line-numbers match-braces language-yaml">operators:
     'between:':
         type: 'range'
         name: 'Between'
@@ -172,14 +179,14 @@ $queryBuilder-&gt;where('flags?b&amp;1');                       // Bitwise AND.
 </ul>
 <h2><a id="content-advanced-usage" href="index.html#content-advanced-usage" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Advanced Usage</h2>
 <h3><a id="content-complex-filtering" href="index.html#content-complex-filtering" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Complex Filtering</h3>
-<pre><code class="language-php">// Find active products with price over 200.
+<pre><code class="line-numbers match-braces language-php">// Find active products with price over 200.
 $result = $queryBuilder
     -&gt;table('products')
     -&gt;where(['flags?b&amp;1', 'price?&gt;200'])
     -&gt;execute();
 </code></pre>
 <h3><a id="content-join-with-conditions" href="index.html#content-join-with-conditions" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Join with Conditions</h3>
-<pre><code class="language-php">// Find high-value invoices for company customers.
+<pre><code class="line-numbers match-braces language-php">// Find high-value invoices for company customers.
 $result = $queryBuilder
     -&gt;select('c.name, i.number, i.total')
     -&gt;where([
@@ -189,7 +196,7 @@ $result = $queryBuilder
     -&gt;execute();
 </code></pre>
 <h3><a id="content-advanced-path-joins" href="index.html#content-advanced-path-joins" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Advanced Path Joins</h3>
-<pre><code class="language-php">// Join with OR conditions.
+<pre><code class="line-numbers match-braces language-php">// Join with OR conditions.
 $result = $queryBuilder
     $this-&gt;select('p.name, i.number')
     $this-&gt;where('products[alias:p]__category?=electronics')
@@ -199,7 +206,7 @@ $result = $queryBuilder
 </code></pre>
 <h3><a id="content-cross-database-compatibility" href="index.html#content-cross-database-compatibility" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Cross-Database Compatibility</h3>
 <p>The same query syntax works across PostgreSQL, MySQL, SQLite, and other supported databases:</p>
-<pre><code class="language-php">// The same query syntax works on any database.
+<pre><code class="line-numbers match-braces language-php">// The same query syntax works on any database.
 $result = $queryBuilder
     -&gt;where('products__price?between:100,500')
     -&gt;andWhere('products__name?~~*computer')          // Case-insensitive contains.
@@ -208,7 +215,7 @@ $result = $queryBuilder
 </code></pre>
 <h3><a id="content-declarative-query-configuration" href="index.html#content-declarative-query-configuration" class="text-decoration-none small text-muted" aria-hidden="true" title="Permalink"><i class="fa-solid fa-link"></i> </a>Declarative Query Configuration</h3>
 <p>Beyond the fluent interface, Derafu\Query provides a powerful configuration-based approach to defining queries through the <code>QueryConfig</code> class:</p>
-<pre><code class="language-php">use Derafu\Query\Config\QueryConfig;
+<pre><code class="line-numbers match-braces language-php">use Derafu\Query\Config\QueryConfig;
 
 // Define a query using an array configuration.
 $config = new QueryConfig([
@@ -257,12 +264,21 @@ $result = $config-&gt;applyTo($queryBuilder)-&gt;execute();
 </div>
 </div>
                 </main>
-                <div class="col-md-2 py-4">
+                <div class="col-md-3 py-4">
                     <div class="list-group mb-4">
                         <li class="list-group-item d-flex justify-content-between align-items-start">
                             <div class="ms-2 me-auto">
-                              <div class="fw-bold">Package Info</div>
-                              <span class="smal text-muted">derafu/query</span>
+                                <div class="fw-bold">Package Info</div>
+                                <span class="smal text-muted">
+                                    <a href="https://github.com/derafu/query" target="_blank" class="link-secondary text-decoration-none">
+                                        <i class="fa-brands fa-github"></i>
+                                        derafu/query
+                                    </a>
+                                </span>
+                                <div class="my-2">
+                                    <img src="https://img.shields.io/github/stars/derafu/query" alt="GitHub Repo stars">
+                                    <img src="https://img.shields.io/github/forks/derafu/query" alt="GitHub forks">
+                                </div>
                             </div>
                         </li>
                         <a href="index.html" class="list-group-item list-group-item-action active">
@@ -291,9 +307,15 @@ $result = $config-&gt;applyTo($queryBuilder)-&gt;execute();
         </div>
     
             <div id="footer-container"></div>
-<script src="https://derafu.org/foundation/js/derafu.js"></script>
+        <script src="https://derafu.org/js/derafu.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/show-language/prism-show-language.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/command-line/prism-command-line.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/match-braces/prism-match-braces.min.js"></script>
     </body>
 </html>
