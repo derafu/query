@@ -18,7 +18,7 @@ use Derafu\Query\Builder\Sql\SqlQuery;
 use Derafu\Query\Builder\SqlQueryBuilder;
 use Derafu\Query\Config\QueryConfig;
 use Derafu\Query\Engine\Contract\SqlEngineInterface;
-use Derafu\Query\Engine\SqlEngine;
+use Derafu\Query\Engine\DoctrineEngine;
 use Derafu\Query\Filter\CompositeCondition;
 use Derafu\Query\Filter\Condition;
 use Derafu\Query\Filter\ExpressionParser;
@@ -30,7 +30,7 @@ use Derafu\Query\Filter\Segment;
 use Derafu\Query\Operator\Operator;
 use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
-use PDO;
+use Doctrine\DBAL\DriverManager as DoctrineDriverManager;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -50,8 +50,8 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(ExpressionParser::class)]
 #[CoversClass(Condition::class)]
 #[CoversClass(CompositeCondition::class)]
-#[CoversClass(SqlEngine::class)]
-class SqliteIntegrationTest extends TestCase
+#[CoversClass(DoctrineEngine::class)]
+class DoctrineSqliteIntegrationTest extends TestCase
 {
     private SqlEngineInterface $engine;
 
@@ -60,11 +60,15 @@ class SqliteIntegrationTest extends TestCase
     protected function setUp(): void
     {
         // Create in-memory SQLite database and load schema and test data.
-        $this->engine = new SqlEngine(new PDO('sqlite::memory:'));
+        $this->engine = new DoctrineEngine(
+            DoctrineDriverManager::getConnection([
+                'driver' => 'pdo_sqlite',
+            ])
+        );
         $schema = file_get_contents(__DIR__ . '/../../fixtures/integration/billing_schema.sql');
-        $this->engine->getConnection()->exec($schema);
+        $this->engine->executeSqlDump($schema);
         $data = file_get_contents(__DIR__ . '/../../fixtures/integration/billing_data.sql');
-        $this->engine->getConnection()->exec($data);
+        $this->engine->executeSqlDump($data);
 
         // Create query builder.
         $pathParser = new PathParser();
@@ -108,5 +112,47 @@ class SqliteIntegrationTest extends TestCase
         }
 
         return $data;
+    }
+
+    public function testGetTable()
+    {
+        $customers = $this->engine->getTable(
+            'SELECT * FROM customers'
+        );
+
+        $this->assertNotEmpty($customers);
+        $this->assertArrayHasKey('id', $customers[0]);
+        $this->assertArrayHasKey('name', $customers[0]);
+    }
+
+    public function testGetRow()
+    {
+        $customer = $this->engine->getRow(
+            'SELECT * FROM customers WHERE id = :id',
+            ['id' => 1]
+        );
+
+        $this->assertNotNull($customer);
+        $this->assertArrayHasKey('id', $customer);
+        $this->assertSame(1, $customer['id']);
+    }
+
+    public function testGetCol()
+    {
+        $names = $this->engine->getCol('SELECT name FROM customers');
+
+        $this->assertNotEmpty($names);
+        $this->assertContains('Acme Corp', $names);
+    }
+
+    public function testGetValue()
+    {
+        $name = $this->engine->getValue(
+            'SELECT name FROM customers WHERE id = :id',
+            ['id' => 3]
+        );
+
+        $this->assertNotNull($name);
+        $this->assertSame('Jane Doe', $name);
     }
 }

@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Engine;
 
+use Derafu\Query\Engine\Abstract\AbstractSqlEngine;
 use Derafu\Query\Engine\Contract\SqlEngineInterface;
 use PDO;
 
@@ -27,7 +28,7 @@ use PDO;
  *   - Connection management.
  *   - Error handling through PDO's exception mode.
  */
-final class SqlEngine implements SqlEngineInterface
+final class PdoEngine extends AbstractSqlEngine implements SqlEngineInterface
 {
     /**
      * Creates a new PDO engine instance.
@@ -66,5 +67,13 @@ final class SqlEngine implements SqlEngineInterface
     public function getDriver(): string
     {
         return $this->connection->getAttribute(PDO::ATTR_DRIVER_NAME);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function executeSqlDump(string $sql): void
+    {
+        $this->connection->exec($sql);
     }
 }

@@ -14,7 +14,7 @@ namespace Derafu\TestsQuery\SqlInjection;
 
 use Derafu\Query\Builder\Sql\SqlQuery;
 use Derafu\Query\Builder\SqlQueryBuilder;
-use Derafu\Query\Engine\SqlEngine;
+use Derafu\Query\Engine\PdoEngine;
 use Derafu\Query\Filter\ExpressionParser;
 use Derafu\Query\Filter\FilterParser;
 use Derafu\Query\Filter\PathParser;
@@ -28,7 +28,7 @@ use PHPUnit\Framework\TestCase;
 
 #[CoversClass(SqlQueryBuilder::class)]
 #[CoversClass(SqlQuery::class)]
-#[CoversClass(SqlEngine::class)]
+#[CoversClass(PdoEngine::class)]
 #[CoversClass(ExpressionParser::class)]
 #[CoversClass(FilterParser::class)]
 #[CoversClass(Operator::class)]
@@ -65,7 +65,7 @@ class SqlSanitizerIntegrationTest extends TestCase
         ");
 
         // Setup the query builder with all dependencies.
-        $engine = new SqlEngine($this->pdo);
+        $engine = new PdoEngine($this->pdo);
         $pathParser = new PathParser();
         $loader = new OperatorLoader();
         $operators = $loader->loadFromFile(__DIR__ . '/../../../config/operators.yaml');

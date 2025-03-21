@@ -47,4 +47,47 @@ interface SqlEngineInterface
      * @return string
      */
     public function getDriver(): string;
+
+    /**
+     * Gets a table from the database.
+     *
+     * @param string $sql The SQL query to execute.
+     * @param array<string,mixed> $parameters Named parameters for the query.
+     * @return array<array<string,mixed>> The query results as an array of rows.
+     */
+    public function getTable(string $sql, array $parameters = []): array;
+
+    /**
+     * Gets a row from the database.
+     *
+     * @param string $sql The SQL query to execute.
+     * @param array<string,mixed> $parameters Named parameters for the query.
+     * @return array<string,mixed> The query results as an array of values.
+     */
+    public function getRow(string $sql, array $parameters = []): array;
+
+    /**
+     * Gets a column from the database.
+     *
+     * @param string $sql The SQL query to execute.
+     * @param array<string,mixed> $parameters Named parameters for the query.
+     * @return array<int,mixed> The query results as an array of values.
+     */
+    public function getCol(string $sql, array $parameters = []): array;
+
+    /**
+     * Gets a value from the database.
+     *
+     * @param string $sql The SQL query to execute.
+     * @param array<string,mixed> $parameters Named parameters for the query.
+     * @return mixed The query result.
+     */
+    public function getValue(string $sql, array $parameters = []): mixed;
+
+    /**
+     * Executes a SQL dump.
+     *
+     * @param string $sql The SQL dump to execute.
+     */
+    public function executeSqlDump(string $sql): void;
 }
