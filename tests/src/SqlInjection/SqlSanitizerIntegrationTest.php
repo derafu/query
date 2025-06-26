@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Derafu: Query - Expressive Path-Based Query Builder for PHP.
  *
- * Copyright (c) 2025 Esteban De La Fuente Rubio / Derafu <https://www.derafu.org>
+ * Copyright (c) 2025 Esteban De La Fuente Rubio / Derafu <https://www.derafu.dev>
  * Licensed under the MIT License.
  * See LICENSE file for more details.
  */
@@ -68,7 +68,7 @@ class SqlSanitizerIntegrationTest extends TestCase
         $engine = new PdoEngine($this->pdo);
         $pathParser = new PathParser();
         $loader = new OperatorLoader();
-        $operators = $loader->loadFromFile(__DIR__ . '/../../../config/operators.yaml');
+        $operators = $loader->loadFromFile(__DIR__ . '/../../../resources/operators.yaml');
         $manager = new OperatorManager($operators);
         $filterParser = new FilterParser($manager);
         $expressionParser = new ExpressionParser($pathParser, $filterParser);
