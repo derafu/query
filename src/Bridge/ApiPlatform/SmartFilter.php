@@ -29,8 +29,8 @@ use Throwable;
  * the path segment.
  *
  * Example:
- *   #[QueryParameter(name: 'price',  property: 'price',  filter: SmartFilter::class)]
- *   #[QueryParameter(name: 'status', property: 'status', filter: SmartFilter::class)]
+ *   #[QueryParameter(key: 'total', property: 'total', filter: SmartFilter::class)]
+ *   #[QueryParameter(key: 'status', property: 'status', filter: SmartFilter::class)]
  *
  *   GET /api/products?price=>1000&status=in:paid,issued
  *
