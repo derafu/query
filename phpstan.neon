@@ -12,3 +12,10 @@ parameters:
           identifier: attribute.nonRepeatable
         - message: '#UsesClass.*is not repeatable#'
           identifier: attribute.nonRepeatable
+        # ORM entity properties are set via reflection by Doctrine, not accessed in PHP.
+        - identifier: property.unused
+          paths:
+              - tests/src/Integration/Bridge/DoctrineORM/Entity
+        - identifier: property.onlyWritten
+          paths:
+              - tests/src/Integration/Bridge/DoctrineORM/Entity

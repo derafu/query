@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Derafu: Query - Expressive Path-Based Query Builder for PHP.
  *
- * Copyright (c) 2025 Esteban De La Fuente Rubio / Derafu <https://www.derafu.dev>
+ * Copyright (c) 2026 Esteban De La Fuente Rubio / Derafu <https://www.derafu.dev>
  * Licensed under the MIT License.
  * See LICENSE file for more details.
  */
@@ -86,6 +86,58 @@ trait ConditionApplierTrait
         }
 
         return null;
+    }
+
+    /**
+     * Builds ORM JOIN specifications from path segments for Doctrine ORM DQL.
+     *
+     * Unlike the SQL variant, no ON conditions are required — Doctrine derives
+     * the join condition from the entity association mapping. Skips paths with
+     * only one segment (no join needed).
+     *
+     * Each spec:
+     *   - type:  'inner' | 'left'
+     *   - join:  DQL join target, e.g. "c.invoices"
+     *   - alias: alias for the joined entity
+     *
+     * @param PathInterface[] $paths
+     * @return array<int, array{type: string, join: string, alias: string}>
+     */
+    protected function buildOrmJoinSpecsFromPaths(array $paths): array
+    {
+        $specs = [];
+        $seen = [];
+
+        foreach ($paths as $path) {
+            $segments = $path->getSegments();
+
+            if (count($segments) <= 1) {
+                continue;
+            }
+
+            $baseSegment = $segments[0];
+            $previousAlias = $baseSegment->getOption('alias') ?? $baseSegment->getName();
+
+            for ($i = 1; $i < count($segments) - 1; $i++) {
+                $segment = $segments[$i];
+                $assoc = $segment->getName();
+                $alias = $segment->getOption('alias') ?? $assoc;
+                $joinType = strtolower($segment->getOption('join', 'inner'));
+
+                if (!isset($seen[$alias])) {
+                    $seen[$alias] = true;
+                    $specs[] = [
+                        'type' => $joinType,
+                        'join' => $previousAlias . '.' . $assoc,
+                        'alias' => $alias,
+                    ];
+                }
+
+                $previousAlias = $alias;
+            }
+        }
+
+        return $specs;
     }
 
     /**

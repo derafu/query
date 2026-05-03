@@ -35,12 +35,14 @@
         "phpunit/phpunit": "^11.5",
         "doctrine/dbal": "^4.4",
         "doctrine/orm": "^3.6",
-        "illuminate/database": "^13.7"
+        "illuminate/database": "^13.7",
+        "api-platform/core": "^4.3"
     },
     "suggest": {
         "doctrine/dbal": "Required to use the Doctrine DBAL SQL engine (DoctrineEngine).",
         "doctrine/orm": "Required to use the Doctrine ORM bridge (DoctrineQueryBuilderConditionApplier).",
-        "illuminate/database": "Required to use the Eloquent bridge (IlluminateQueryBuilderConditionApplier)."
+        "illuminate/database": "Required to use the Eloquent bridge (IlluminateQueryBuilderConditionApplier).",
+        "api-platform/core": "Required to use the API Platform custom filters."
     },
     "scripts": {
         "docs": "php tools/phpdocumentor run --config=phpdoc.xml",

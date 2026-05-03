@@ -83,6 +83,17 @@ return [
                 'where' => 'price?>1000',
             ],
         ],
+        'less_than_or_equal' => [
+            'description' => 'Find products with price <= 200',
+            'sql' => [
+                'sql' => 'SELECT * FROM products WHERE (price <= :value)',
+                'parameters' => ['value' => '200'],
+            ],
+            'query' => [
+                'table' => 'products',
+                'where' => 'price?<=200',
+            ],
+        ],
 
         // LIKE operators.
         'contains_case_sensitive' => [
@@ -146,6 +157,17 @@ return [
                 'where' => 'deleted_at?isnot:null',
             ],
         ],
+        'not_soft_deleted' => [
+            'description' => 'Find non-deleted records',
+            'sql' => [
+                'sql' => 'SELECT * FROM customers WHERE (deleted_at IS NULL)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'customers',
+                'where' => 'deleted_at?is:null',
+            ],
+        ],
 
         // Date operators (usando las funciones de SQLite).
         'march_invoices' => [
@@ -174,6 +196,17 @@ return [
         ],
 
         // Composite AND conditions.
+        'active_high_price_products' => [
+            'description' => 'Find software products with price > 200',
+            'sql' => [
+                'sql' => 'SELECT * FROM products WHERE (category = :value1 AND price > :value2)',
+                'parameters' => ['value1' => 'software', 'value2' => '200'],
+            ],
+            'query' => [
+                'table' => 'products',
+                'where' => ['category?=software', 'price?>200'],
+            ],
+        ],
         'active_expensive_products' => [
             'description' => 'Find active products with price > 200',
             'sql' => [
@@ -187,6 +220,18 @@ return [
         ],
 
         // Composite OR conditions.
+        'electronics_or_hardware' => [
+            'description' => 'Find electronics OR hardware products',
+            'sql' => [
+                'sql' => 'SELECT * FROM products WHERE (category = :value1 OR category = :value2)',
+                'parameters' => ['value1' => 'electronics', 'value2' => 'hardware'],
+            ],
+            'query' => [
+                'table' => 'products',
+                'where' => 'category?=electronics',
+                'orWhere' => 'category?=hardware',
+            ],
+        ],
         'electronics_or_expensive' => [
             'description' => 'Find electronics OR expensive products',
             'sql' => [
@@ -458,6 +503,20 @@ return [
                 'innerJoin' => ['table' => 'customers', 'alias' => 'c', 'condition' => 'i.customer_id = c.id'],
             ],
         ],
+        'join_with_where_condition' => [
+            'description' => 'Get paid invoices with customer name',
+            'sql' => [
+                'sql' => 'SELECT i.id, i.number, c.name AS customer_name FROM invoices AS i INNER JOIN customers AS c ON i.customer_id = c.id WHERE (i.status = :status)',
+                'parameters' => ['status' => 'paid'],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'alias' => 'i',
+                'select' => 'i.id, i.number, c.name AS customer_name',
+                'innerJoin' => ['table' => 'customers', 'alias' => 'c', 'condition' => 'i.customer_id = c.id'],
+                'where' => 'i.status?=paid',
+            ],
+        ],
         'left_join_customers_invoices' => [
             'description' => 'Get all customers with their invoices (if any)',
             'sql' => [
@@ -506,6 +565,18 @@ return [
         ],
 
         // Joins usando los paths para la definición de estos.
+
+        'path_join_from_customers_to_invoices' => [
+            'description' => 'Find paid invoices starting from customer using path syntax',
+            'sql' => [
+                'sql' => 'SELECT c.name AS customer_name, i.number AS number, i.status AS status FROM customers AS c INNER JOIN invoices AS i ON c.id = i.customer_id WHERE (i.status = :status)',
+                'parameters' => ['status' => 'paid'],
+            ],
+            'query' => [
+                'select' => 'c.name AS customer_name, i.number AS number, i.status AS status',
+                'where' => 'customers[alias:c]__invoices[on:id=customer_id,alias:i]__status?=paid',
+            ],
+        ],
 
         'path_join_customers_invoices' => [
             'description' => 'Find invoices with customer information using path syntax',
