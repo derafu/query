@@ -13,11 +13,9 @@ declare(strict_types=1);
 namespace Derafu\Query\Bridge;
 
 use Derafu\Query\Bridge\Contract\QueryBuilderConditionApplierInterface;
-use Derafu\Query\Builder\Sql\SqlBuilderWhere;
-use Derafu\Query\Builder\Sql\SqlSanitizerTrait;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
-use Derafu\Query\Filter\Contract\PathInterface;
+use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 
@@ -34,7 +32,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  */
 final class IlluminateQueryBuilderConditionApplier implements QueryBuilderConditionApplierInterface
 {
-    use SqlSanitizerTrait;
+    use ConditionApplierTrait;
 
     /**
      * {@inheritDoc}
@@ -47,7 +45,10 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
 
         $this->processFromAndJoins($qb, $condition);
 
-        ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql($qb, $condition);
+        ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql(
+            $this->resolveDriver($qb),
+            $condition
+        );
 
         $qb->whereRaw($sql, $params);
     }
@@ -61,9 +62,25 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
     ): void {
         $qb = $this->resolveBuilder($queryBuilder);
 
-        ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql($qb, $condition);
+        ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql(
+            $this->resolveDriver($qb),
+            $condition
+        );
 
         $qb->havingRaw($sql, $params);
+    }
+
+    /**
+     * Returns the driver name string used by SqlBuilderWhere.
+     *
+     * getConnection() is typed ConnectionInterface which does not declare
+     * getDriverName(); asserting the concrete Connection class resolves this.
+     */
+    private function resolveDriver(QueryBuilder $qb): string
+    {
+        $connection = $qb->getConnection();
+        assert($connection instanceof Connection);
+        return $connection->getDriverName();
     }
 
     /**
@@ -85,22 +102,6 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
     }
 
     /**
-     * Compiles a condition tree into a SQL fragment and its parameters.
-     *
-     * @return array{sql: string, parameters: array}
-     */
-    private function buildConditionSql(
-        QueryBuilder $qb,
-        ConditionInterface|CompositeConditionInterface $condition
-    ): array {
-        $connection = $qb->getConnection();
-        assert($connection instanceof \Illuminate\Database\Connection);
-        $driver = $connection->getDriverName();
-
-        return (new SqlBuilderWhere($driver))->build($condition)->getQuery();
-    }
-
-    /**
      * Infers the base table from path segments (if FROM not yet set)
      * and applies all JOIN clauses found in the condition paths.
      */
@@ -110,101 +111,34 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
     ): void {
         $paths = $this->extractPaths($condition);
 
-        $currentFrom = property_exists($qb, 'from') ? $qb->from : null;
-
-        if (empty($currentFrom)) {
-            foreach ($paths as $path) {
-                $segments = $path->getSegments();
-                if (count($segments) > 1) {
-                    $first = $segments[0];
-                    $table = $this->sanitizeSqlSimpleIdentifier($first->getName());
-                    $alias = $first->getOption('alias');
-                    $qb->from(
-                        $table,
-                        $alias ? $this->sanitizeSqlSimpleIdentifier($alias) : null
-                    );
-                    break;
-                }
-            }
-        }
-
-        foreach ($paths as $path) {
-            $this->applyJoinsFromPath($qb, $path);
-        }
-    }
-
-    /**
-     * Applies JOINs derived from a multi-segment path.
-     * Skips joins that were already added to the query builder.
-     */
-    private function applyJoinsFromPath(
-        QueryBuilder $qb,
-        PathInterface $path
-    ): void {
-        $segments = $path->getSegments();
-
-        if (count($segments) <= 1) {
-            return;
-        }
-
-        $baseSegment = $segments[0];
-        $baseTable = $this->sanitizeSqlSimpleIdentifier($baseSegment->getName());
-
         $currentFrom = property_exists($qb, 'from') ? (string)$qb->from : '';
-        $fromTable = strtolower(trim(preg_replace('/\s+as\s+\S+$/i', '', $currentFrom)));
+        $fromTable = strtolower(trim(preg_replace('/\s+as\s+\S+$/i', '', $currentFrom) ?? ''));
 
-        if (!empty($fromTable) && $fromTable !== strtolower($baseTable)) {
-            return;
+        if (empty($fromTable)) {
+            $fromSpec = $this->inferFromTable($paths);
+            if ($fromSpec !== null) {
+                $qb->from($fromSpec['table'], $fromSpec['alias']);
+                $fromTable = strtolower($fromSpec['table']);
+            }
         }
 
-        $previousAlias = $baseSegment->getOption('alias') ?? $baseSegment->getName();
-
-        for ($i = 1; $i < count($segments) - 1; $i++) {
-            $segment = $segments[$i];
-            $targetTable = $this->sanitizeSqlSimpleIdentifier($segment->getName());
-            $targetAlias = $segment->getOption('alias');
-            $joinType = strtolower($segment->getOption('join', 'inner'));
-
-            $joinConditions = $segment->getOption('on');
-            if (!$joinConditions) {
-                $previousAlias = $targetAlias ?? $targetTable;
-                continue;
-            }
-
-            $parts = [];
-            foreach ($joinConditions as $sourceCol => $targetCol) {
-                $parts[] = sprintf(
-                    '%s.%s = %s.%s',
-                    $this->sanitizeSqlSimpleIdentifier($previousAlias),
-                    $this->sanitizeSqlSimpleIdentifier($sourceCol),
-                    $this->sanitizeSqlSimpleIdentifier($targetAlias ?? $targetTable),
-                    $this->sanitizeSqlSimpleIdentifier($targetCol)
-                );
-            }
-            $onCondition = implode(' AND ', $parts);
-
-            $tableRef = $targetAlias
-                ? $targetTable . ' as ' . $this->sanitizeSqlSimpleIdentifier($targetAlias)
-                : $targetTable;
-
-            if (!$this->hasJoin($qb, $tableRef)) {
-                match ($joinType) {
+        foreach ($this->buildJoinSpecsFromPaths($paths, $fromTable) as $spec) {
+            if (!$this->hasJoin($qb, $spec['tableRef'])) {
+                match ($spec['type']) {
                     'left' => $qb->leftJoin(
-                        $tableRef,
-                        fn ($join) => $join->whereRaw($onCondition)
+                        $spec['tableRef'],
+                        fn ($join) => $join->whereRaw($spec['condition'])
                     ),
                     'right' => $qb->rightJoin(
-                        $tableRef,
-                        fn ($join) => $join->whereRaw($onCondition)
+                        $spec['tableRef'],
+                        fn ($join) => $join->whereRaw($spec['condition'])
                     ),
                     default => $qb->join(
-                        $tableRef,
-                        fn ($join) => $join->whereRaw($onCondition)
+                        $spec['tableRef'],
+                        fn ($join) => $join->whereRaw($spec['condition'])
                     ),
                 };
             }
-
-            $previousAlias = $targetAlias ?? $targetTable;
         }
     }
 
@@ -223,24 +157,5 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
             }
         }
         return false;
-    }
-
-    /**
-     * Recursively collects all path objects from a condition tree.
-     *
-     * @return PathInterface[]
-     */
-    private function extractPaths(
-        ConditionInterface|CompositeConditionInterface $condition
-    ): array {
-        if ($condition instanceof ConditionInterface) {
-            return [$condition->getPath()];
-        }
-
-        $paths = [];
-        foreach ($condition->getConditions() as $sub) {
-            $paths = array_merge($paths, $this->extractPaths($sub));
-        }
-        return $paths;
     }
 }
