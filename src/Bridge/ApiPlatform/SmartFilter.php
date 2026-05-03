@@ -44,6 +44,7 @@ final class SmartFilter implements FilterInterface
     public function __construct(
         private readonly ExpressionParserInterface $expressionParser,
         private readonly DoctrineORMQueryBuilderConditionApplier $applier,
+        private readonly string $smartFilterProperty = '__derafu_smart_filter',
     ) {
     }
 
@@ -76,10 +77,14 @@ final class SmartFilter implements FilterInterface
             return;
         }
 
+        if ($property === $this->smartFilterProperty) {
+            $expression = $value;
+        } else {
+            $expression = $property . '?' . $value;
+        }
+
         try {
-            $condition = $this->expressionParser->parse(
-                $property . '?' . $value
-            );
+            $condition = $this->expressionParser->parse($expression);
             $this->applier->apply($queryBuilder, $condition);
         } catch (UnsupportedOperatorException) {
             // Operators requiring SQL functions (date:, b&, ilike:, …) are
