@@ -18,11 +18,6 @@ use ApiPlatform\Metadata\Operation;
 use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\Exception\UnsupportedOperatorException;
 use Derafu\Query\Filter\Contract\ExpressionParserInterface;
-use Derafu\Query\Filter\ExpressionParser;
-use Derafu\Query\Filter\FilterParser;
-use Derafu\Query\Filter\PathParser;
-use Derafu\Query\Operator\OperatorLoader;
-use Derafu\Query\Operator\OperatorManager;
 use Doctrine\ORM\QueryBuilder;
 use Throwable;
 
@@ -48,8 +43,7 @@ final class SmartFilter implements FilterInterface
 {
     public function __construct(
         private readonly ExpressionParserInterface $expressionParser,
-        private readonly DoctrineORMQueryBuilderConditionApplier $applier =
-            new DoctrineORMQueryBuilderConditionApplier(),
+        private readonly DoctrineORMQueryBuilderConditionApplier $applier,
     ) {
     }
 
@@ -103,22 +97,5 @@ final class SmartFilter implements FilterInterface
     public function getDescription(string $resourceClass): array
     {
         return [];
-    }
-
-    /**
-     * Bootstraps SmartFilter without Symfony DI.
-     *
-     * @param string|null $operatorsYamlPath Path to operators.yaml; defaults to
-     * the package resources/operators.yaml.
-     */
-    public static function create(?string $operatorsYamlPath = null): self
-    {
-        $path = $operatorsYamlPath ?? __DIR__ . '/../../../resources/operators.yaml';
-        $operators = (new OperatorLoader())->loadFromFile($path);
-        $manager = new OperatorManager($operators);
-
-        return new self(
-            new ExpressionParser(new PathParser(), new FilterParser($manager))
-        );
     }
 }
