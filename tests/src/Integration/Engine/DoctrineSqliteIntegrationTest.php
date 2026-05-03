@@ -10,7 +10,7 @@ declare(strict_types=1);
  * See LICENSE file for more details.
  */
 
-namespace Derafu\TestsQuery\Integration;
+namespace Derafu\TestsQuery\Integration\Engine;
 
 use Derafu\Query\Builder\Contract\QueryBuilderInterface;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
@@ -65,15 +65,15 @@ class DoctrineSqliteIntegrationTest extends TestCase
                 'driver' => 'pdo_sqlite',
             ])
         );
-        $schema = file_get_contents(__DIR__ . '/../../fixtures/integration/billing_schema.sql');
+        $schema = file_get_contents(__DIR__ . '/../../../fixtures/integration/billing_schema.sql');
         $this->engine->executeSqlDump($schema);
-        $data = file_get_contents(__DIR__ . '/../../fixtures/integration/billing_data.sql');
+        $data = file_get_contents(__DIR__ . '/../../../fixtures/integration/billing_data.sql');
         $this->engine->executeSqlDump($data);
 
         // Create query builder.
         $pathParser = new PathParser();
         $loader = new OperatorLoader();
-        $operators = $loader->loadFromFile(__DIR__ . '/../../../resources/operators.yaml');
+        $operators = $loader->loadFromFile(__DIR__ . '/../../../../resources/operators.yaml');
         $manager = new OperatorManager($operators);
         $filterParser = new FilterParser($manager);
         $expressionParser = new ExpressionParser($pathParser, $filterParser);
@@ -100,7 +100,7 @@ class DoctrineSqliteIntegrationTest extends TestCase
 
     public static function queryProvider(): array
     {
-        $cases = require __DIR__ . '/../../fixtures/integration/queries_integration.php';
+        $cases = require __DIR__ . '/../../../fixtures/integration/queries_integration.php';
         $data = [];
 
         foreach ($cases['cases'] as $name => $case) {

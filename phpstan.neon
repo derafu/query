@@ -10,3 +10,5 @@ parameters:
     ignoreErrors:
         - message: '#CoversClass.*is not repeatable#'
           identifier: attribute.nonRepeatable
+        - message: '#UsesClass.*is not repeatable#'
+          identifier: attribute.nonRepeatable
