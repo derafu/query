@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Derafu: Query - Expressive Path-Based Query Builder for PHP.
  *
- * Copyright (c) 2026 Esteban De La Fuente Rubio / Derafu <https://www.derafu.dev>
+ * Copyright (c) 2025 Esteban De La Fuente Rubio / Derafu <https://www.derafu.dev>
  * Licensed under the MIT License.
  * See LICENSE file for more details.
  */
@@ -15,16 +15,53 @@ namespace Derafu\Query\Bridge\ApiPlatform;
 use ApiPlatform\Doctrine\Orm\Filter\FilterInterface;
 use ApiPlatform\Doctrine\Orm\Util\QueryNameGeneratorInterface;
 use ApiPlatform\Metadata\Operation;
+use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
+use Derafu\Query\Bridge\Exception\UnsupportedOperatorException;
+use Derafu\Query\Filter\Contract\ExpressionParserInterface;
+use Derafu\Query\Filter\ExpressionParser;
+use Derafu\Query\Filter\FilterParser;
+use Derafu\Query\Filter\PathParser;
+use Derafu\Query\Operator\OperatorLoader;
+use Derafu\Query\Operator\OperatorManager;
 use Doctrine\ORM\QueryBuilder;
+use Throwable;
 
 /**
- * Custom Doctrine filter for API Platform that uses Derafu Query to apply
- * conditions to the query builder.
+ * API Platform filter that accepts Derafu Query expressions as parameter values.
+ *
+ * Register it on a resource property via QueryParameter. The URL value is the
+ * operator + operand part of a Derafu expression; the property name provides
+ * the path segment.
+ *
+ * Example:
+ *   #[QueryParameter(name: 'price',  property: 'price',  filter: SmartFilter::class)]
+ *   #[QueryParameter(name: 'status', property: 'status', filter: SmartFilter::class)]
+ *
+ *   GET /api/products?price=>1000&status=in:paid,issued
+ *
+ * For Symfony DI, inject ExpressionParserInterface as a service.
+ * For zero-config usage, call SmartFilter::create().
  *
  * @link https://api-platform.com/docs/guides/create-a-custom-doctrine-filter/
  */
 final class SmartFilter implements FilterInterface
 {
+    public function __construct(
+        private readonly ExpressionParserInterface $expressionParser,
+        private readonly DoctrineORMQueryBuilderConditionApplier $applier =
+            new DoctrineORMQueryBuilderConditionApplier(),
+    ) {
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * Builds a Derafu expression from the parameter property and value, parses
+     * it, and applies the resulting condition to the QueryBuilder.
+     *
+     * Invalid expressions and DQL-incompatible operators are skipped silently
+     * so that one bad filter does not crash the entire collection endpoint.
+     */
     public function apply(
         QueryBuilder $queryBuilder,
         QueryNameGeneratorInterface $queryNameGenerator,
@@ -33,37 +70,55 @@ final class SmartFilter implements FilterInterface
         array $context = []
     ): void {
         $parameter = $context['parameter'] ?? null;
+        $property = $parameter?->getProperty();
         $value = $parameter?->getValue();
 
-        // If the value is missing or invalid, we skip the filter.
-        if (!$value) {
+        if (
+            !is_string($property)
+            || $property === ''
+            || !is_string($value)
+            || $value === ''
+        ) {
             return;
         }
 
-        // Determine which property to filter on. The QueryParameter attribute
-        // provides the property name (explicitly or inferred).
-        $property = $parameter->getProperty();
-        if (!$property) {
-            return;
+        try {
+            $condition = $this->expressionParser->parse(
+                $property . '?' . $value
+            );
+            $this->applier->apply($queryBuilder, $condition);
+        } catch (UnsupportedOperatorException) {
+            // Operators requiring SQL functions (date:, b&, ilike:, …) are
+            // not expressible in DQL — skip silently.
+        } catch (Throwable) {
+            // Malformed expressions are skipped silently.
         }
-
-        // Generate a unique parameter name to avoid collisions in the DQL.
-        $parameterName = $queryNameGenerator->generateParameterName($property);
-        $alias = $queryBuilder->getRootAliases()[0];
-        $queryBuilder
-            ->andWhere(sprintf('LENGTH(%s.%s) >= :%s', $alias, $property, $parameterName))
-            ->setParameter($parameterName, $value)
-        ;
     }
 
     /**
      * {@inheritDoc}
      *
-     * The getDescription method is no longer needed when using QueryParameter
-     * because the documentation is handled by the attribute itself.
+     * Documentation is handled by the QueryParameter attribute itself.
      */
     public function getDescription(string $resourceClass): array
     {
         return [];
+    }
+
+    /**
+     * Bootstraps SmartFilter without Symfony DI.
+     *
+     * @param string|null $operatorsYamlPath Path to operators.yaml; defaults to
+     * the package resources/operators.yaml.
+     */
+    public static function create(?string $operatorsYamlPath = null): self
+    {
+        $path = $operatorsYamlPath ?? __DIR__ . '/../../../resources/operators.yaml';
+        $operators = (new OperatorLoader())->loadFromFile($path);
+        $manager = new OperatorManager($operators);
+
+        return new self(
+            new ExpressionParser(new PathParser(), new FilterParser($manager))
+        );
     }
 }
