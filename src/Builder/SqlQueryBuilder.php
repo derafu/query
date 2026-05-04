@@ -113,6 +113,8 @@ final class SqlQueryBuilder implements QueryBuilderInterface
      */
     private array $joins = [];
 
+    private ?SqlBuilderWhere $conditionBuilder = null;
+
     /**
      * Create a new SQL Query Builder.
      *
@@ -502,8 +504,8 @@ final class SqlQueryBuilder implements QueryBuilderInterface
 
         // Build WHERE clause.
         if (isset($this->where)) {
-            $conditionBuilder = new SqlBuilderWhere($this->engine->getDriver());
-            $result = $conditionBuilder->build($this->where)->getQuery();
+            $this->conditionBuilder ??= new SqlBuilderWhere($this->engine->getDriver());
+            $result = $this->conditionBuilder->build($this->where)->getQuery();
             $sql .= ' WHERE ' . $result['sql'];
             $parameters = $result['parameters'];
         }
@@ -515,8 +517,8 @@ final class SqlQueryBuilder implements QueryBuilderInterface
 
         // Build HAVING clause.
         if (isset($this->having)) {
-            $conditionBuilder = new SqlBuilderWhere($this->engine->getDriver());
-            $result = $conditionBuilder->build($this->having)->getQuery();
+            $this->conditionBuilder ??= new SqlBuilderWhere($this->engine->getDriver());
+            $result = $this->conditionBuilder->build($this->having)->getQuery();
             $sql .= ' HAVING ' . $result['sql'];
             $parameters = array_merge($parameters, $result['parameters']);
         }

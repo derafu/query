@@ -84,9 +84,8 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
      */
     private function resolveDriver(DoctrineDBALQueryBuilder $qb): string
     {
-        $connection = (new ReflectionProperty($qb, 'connection'))->getValue($qb);
-        assert($connection instanceof \Doctrine\DBAL\Connection);
-        $platform = $connection->getDatabasePlatform();
+        self::$connectionProperty ??= new ReflectionProperty($qb, 'connection');
+        $platform = self::$connectionProperty->getValue($qb)->getDatabasePlatform();
 
         return match (true) {
             $platform instanceof MySQLPlatform => 'mysql',
@@ -144,6 +143,12 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
         }
     }
 
+    private static ?ReflectionProperty $connectionProperty = null;
+
+    private static ?ReflectionProperty $fromProperty = null;
+
+    private static ?ReflectionProperty $joinProperty = null;
+
     /**
      * Returns the lower-cased alias (or table name) of the first FROM entry,
      * or an empty string when no FROM has been set yet.
@@ -153,7 +158,8 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
      */
     private function getFrom(DoctrineDBALQueryBuilder $qb): string
     {
-        $from = (new ReflectionProperty($qb, 'from'))->getValue($qb);
+        self::$fromProperty ??= new ReflectionProperty($qb, 'from');
+        $from = self::$fromProperty->getValue($qb);
 
         if (empty($from)) {
             return '';
@@ -170,7 +176,8 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
      */
     private function hasJoin(DoctrineDBALQueryBuilder $qb, string $alias): bool
     {
-        $joins = (new ReflectionProperty($qb, 'join'))->getValue($qb);
+        self::$joinProperty ??= new ReflectionProperty($qb, 'join');
+        $joins = self::$joinProperty->getValue($qb);
 
         foreach ($joins as $fromJoins) {
             foreach ($fromJoins as $join) {

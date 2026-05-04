@@ -30,6 +30,16 @@ trait ConditionApplierTrait
     use SqlSanitizerTrait;
 
     /**
+     * Cache de instancias SqlBuilderWhere por driver. SqlBuilderWhere es
+     * stateless (solo almacena engine y listDelimiter como readonly), por lo
+     * que la misma instancia puede reutilizarse indefinidamente para el mismo
+     * driver. En la práctica habrá como máximo una entrada por tipo de BD.
+     *
+     * @var array<string, SqlBuilderWhere>
+     */
+    private array $sqlBuilderCache = [];
+
+    /**
      * Compiles a condition tree into a SQL fragment and its named parameters.
      *
      * @return array{sql: string, parameters: array<string, mixed>}
@@ -38,7 +48,9 @@ trait ConditionApplierTrait
         string $driver,
         ConditionInterface|CompositeConditionInterface $condition
     ): array {
-        return (new SqlBuilderWhere($driver))->build($condition)->getQuery();
+        $this->sqlBuilderCache[$driver] ??= new SqlBuilderWhere($driver);
+
+        return $this->sqlBuilderCache[$driver]->build($condition)->getQuery();
     }
 
     /**

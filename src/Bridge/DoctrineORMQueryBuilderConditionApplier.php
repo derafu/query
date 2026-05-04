@@ -20,14 +20,18 @@ use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Path;
 use Derafu\Query\Filter\Segment;
+use Doctrine\DBAL\Platforms\MySQLPlatform;
+use Doctrine\DBAL\Platforms\OraclePlatform;
+use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
+use Doctrine\DBAL\Platforms\SQLitePlatform;
+use Doctrine\DBAL\Platforms\SQLServerPlatform;
 use Doctrine\ORM\QueryBuilder as DoctrineORMQueryBuilder;
 
 /**
  * Applies parsed conditions to a Doctrine ORM QueryBuilder.
  *
  * Generates DQL-compatible WHERE/HAVING clauses via SqlBuilderWhere, using the
- * 'pgsql' driver which produces standard SQL compatible with DQL for all
- * supported operators.
+ * actual database platform resolved from the EntityManager connection.
  *
  * Operators that require SQL-specific functions (DATE, MONTH, YEAR, PERIOD,
  * bitwise, regexp, ILIKE) are not expressible in DQL and will throw
@@ -67,7 +71,10 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
             $condition = $this->qualifyPaths($condition, $rootAlias);
         }
 
-        ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql('pgsql', $condition);
+        ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql(
+            $this->resolveDriver($queryBuilder),
+            $condition
+        );
 
         $queryBuilder->andWhere($sql);
         foreach ($params as $name => $value) {
@@ -91,12 +98,32 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
             $condition = $this->qualifyPaths($condition, $rootAlias);
         }
 
-        ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql('pgsql', $condition);
+        ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql(
+            $this->resolveDriver($queryBuilder),
+            $condition
+        );
 
         $queryBuilder->andHaving($sql);
         foreach ($params as $name => $value) {
             $queryBuilder->setParameter($name, $value);
         }
+    }
+
+    /**
+     * Maps the Doctrine DBAL platform to the driver name used by SqlBuilderWhere.
+     */
+    private function resolveDriver(DoctrineORMQueryBuilder $qb): string
+    {
+        $platform = $qb->getEntityManager()->getConnection()->getDatabasePlatform();
+
+        return match (true) {
+            $platform instanceof MySQLPlatform => 'mysql',
+            $platform instanceof PostgreSQLPlatform => 'pgsql',
+            $platform instanceof SQLitePlatform => 'sqlite',
+            $platform instanceof SQLServerPlatform => 'sqlsrv',
+            $platform instanceof OraclePlatform => 'oci',
+            default => 'pgsql',
+        };
     }
 
     /**
