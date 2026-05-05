@@ -884,4 +884,59 @@ return [
             ],
         ],
     ],
+
+    // Composite expression cases — parsed by CompositeExpressionParser.
+    // Each case carries a single `composite` string with && / || / () notation.
+
+    'composite_cases' => [
+
+        'composite_and_simple' => [
+            'description' => 'Software products with price > 200 via composite AND (&&)',
+            'sql' => [
+                'sql' => 'SELECT * FROM products WHERE (category = :value1 AND price > :value2)',
+                'parameters' => ['value1' => 'software', 'value2' => '200'],
+            ],
+            'query' => [
+                'table' => 'products',
+                'composite' => 'category?=software&&price?>200',
+            ],
+        ],
+
+        'composite_or_simple' => [
+            'description' => 'Electronics or hardware products via composite OR (||)',
+            'sql' => [
+                'sql' => 'SELECT * FROM products WHERE (category = :value1 OR category = :value2)',
+                'parameters' => ['value1' => 'electronics', 'value2' => 'hardware'],
+            ],
+            'query' => [
+                'table' => 'products',
+                'composite' => 'category?=electronics||category?=hardware',
+            ],
+        ],
+
+        'composite_and_nested_or' => [
+            'description' => 'Active customers who are persons OR have tax_id starting with 78, via composite',
+            'sql' => [
+                'sql' => 'SELECT * FROM customers WHERE (status = :value1 AND (type = :value2 OR tax_id LIKE :value3))',
+                'parameters' => ['value1' => 'active', 'value2' => 'person', 'value3' => '78%'],
+            ],
+            'query' => [
+                'table' => 'customers',
+                'composite' => 'status?=active&&(type?=person||tax_id?^78)',
+            ],
+        ],
+
+        'composite_or_nested_and' => [
+            'description' => 'Software products OR hardware products with price > 200, via composite',
+            'sql' => [
+                'sql' => 'SELECT * FROM products WHERE (category = :value1 OR (category = :value2 AND price > :value3))',
+                'parameters' => ['value1' => 'software', 'value2' => 'hardware', 'value3' => '200'],
+            ],
+            'query' => [
+                'table' => 'products',
+                'composite' => 'category?=software||(category?=hardware&&price?>200)',
+            ],
+        ],
+
+    ],
 ];

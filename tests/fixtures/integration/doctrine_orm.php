@@ -713,6 +713,70 @@ return [
     ],
 
     // ----------------------------------------------------------------
+    // Composite expression cases — parsed by CompositeExpressionParser.
+    // ----------------------------------------------------------------
+
+    'composite_cases' => [
+
+        'composite_and_simple' => [
+            'description' => 'Software products with price > 200 via composite AND (&&)',
+            'sql' => [
+                'sql' => 'SELECT p.id AS id, p.name AS name, p.category AS category FROM products p WHERE (p.category = :value1 AND p.price > :value2)',
+                'parameters' => ['value1' => 'software', 'value2' => '200'],
+            ],
+            'query' => [
+                'table' => Product::class,
+                'alias' => 'p',
+                'select' => 'p.id AS id, p.name AS name, p.category AS category',
+                'composite' => 'category?=software&&price?>200',
+            ],
+        ],
+
+        'composite_or_simple' => [
+            'description' => 'Electronics or hardware products via composite OR (||)',
+            'sql' => [
+                'sql' => 'SELECT p.id AS id, p.name AS name, p.category AS category FROM products p WHERE (p.category = :value1 OR p.category = :value2)',
+                'parameters' => ['value1' => 'electronics', 'value2' => 'hardware'],
+            ],
+            'query' => [
+                'table' => Product::class,
+                'alias' => 'p',
+                'select' => 'p.id AS id, p.name AS name, p.category AS category',
+                'composite' => 'category?=electronics||category?=hardware',
+            ],
+        ],
+
+        'composite_and_nested_or' => [
+            'description' => 'Active customers who are persons OR have tax_id starting with 78, via composite',
+            'sql' => [
+                'sql' => 'SELECT c.id AS id, c.name AS name, c.type AS type FROM customers c WHERE (c.status = :value1 AND (c.type = :value2 OR c.tax_id LIKE :value3))',
+                'parameters' => ['value1' => 'active', 'value2' => 'person', 'value3' => '78%'],
+            ],
+            'query' => [
+                'table' => Customer::class,
+                'alias' => 'c',
+                'select' => 'c.id AS id, c.name AS name, c.type AS type',
+                'composite' => 'status?=active&&(type?=person||tax_id?^78)',
+            ],
+        ],
+
+        'composite_or_nested_and' => [
+            'description' => 'Software products OR hardware products with price > 200, via composite',
+            'sql' => [
+                'sql' => 'SELECT p.id AS id, p.name AS name, p.category AS category FROM products p WHERE (p.category = :value1 OR (p.category = :value2 AND p.price > :value3))',
+                'parameters' => ['value1' => 'software', 'value2' => 'hardware', 'value3' => '200'],
+            ],
+            'query' => [
+                'table' => Product::class,
+                'alias' => 'p',
+                'select' => 'p.id AS id, p.name AS name, p.category AS category',
+                'composite' => 'category?=software||(category?=hardware&&price?>200)',
+            ],
+        ],
+
+    ],
+
+    // ----------------------------------------------------------------
     // Exception cases: operators incompatible with DQL.
     // ----------------------------------------------------------------
 
