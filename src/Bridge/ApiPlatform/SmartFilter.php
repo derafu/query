@@ -17,7 +17,7 @@ use ApiPlatform\Doctrine\Orm\Util\QueryNameGeneratorInterface;
 use ApiPlatform\Metadata\Operation;
 use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\Exception\UnsupportedOperatorException;
-use Derafu\Query\Filter\Contract\ExpressionParserInterface;
+use Derafu\Query\Filter\Contract\CompositeExpressionParserInterface;
 use Doctrine\ORM\QueryBuilder;
 use Throwable;
 
@@ -34,7 +34,7 @@ use Throwable;
  *
  *   GET /api/products?price=>1000&status=in:paid,issued
  *
- * For Symfony DI, inject ExpressionParserInterface as a service.
+ * For Symfony DI, inject CompositeExpressionParserInterface as a service.
  * For zero-config usage, call SmartFilter::create().
  *
  * @link https://api-platform.com/docs/guides/create-a-custom-doctrine-filter/
@@ -42,7 +42,7 @@ use Throwable;
 final class SmartFilter implements FilterInterface
 {
     public function __construct(
-        private readonly ExpressionParserInterface $expressionParser,
+        private readonly CompositeExpressionParserInterface $compositeParser,
         private readonly DoctrineORMQueryBuilderConditionApplier $applier,
         private readonly string $smartFilterProperty = '__derafu_smart_filter',
     ) {
@@ -84,7 +84,7 @@ final class SmartFilter implements FilterInterface
         }
 
         try {
-            $condition = $this->expressionParser->parse($expression);
+            $condition = $this->compositeParser->parse($expression);
             $this->applier->apply($queryBuilder, $condition);
         } catch (UnsupportedOperatorException) {
             // Operators requiring SQL functions (date:, b&, ilike:, …) are
