@@ -50,7 +50,8 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
 
         ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql(
             $this->resolveDriver($queryBuilder),
-            $condition
+            $condition,
+            $this->getFromAliasOrTable($queryBuilder)
         );
 
         $queryBuilder->andWhere($sql);
@@ -150,8 +151,8 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
     private static ?ReflectionProperty $joinProperty = null;
 
     /**
-     * Returns the lower-cased alias (or table name) of the first FROM entry,
-     * or an empty string when no FROM has been set yet.
+     * Returns the lower-cased table name of the first FROM entry, or an empty
+     * string when no FROM has been set yet. Used for path-segment matching.
      *
      * Doctrine DBAL stores FROM entries in a private array, so reflection is
      * required to inspect it without resorting to getSQL() parsing.
@@ -166,6 +167,23 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
         }
 
         return strtolower($from[0]->table);
+    }
+
+    /**
+     * Returns the alias (if any) or table name of the first FROM entry, or an
+     * empty string when no FROM has been set yet. Used as parentAlias in EXISTS
+     * correlation conditions.
+     */
+    private function getFromAliasOrTable(DoctrineDBALQueryBuilder $qb): string
+    {
+        self::$fromProperty ??= new ReflectionProperty($qb, 'from');
+        $from = self::$fromProperty->getValue($qb);
+
+        if (empty($from)) {
+            return '';
+        }
+
+        return strtolower($from[0]->alias ?? $from[0]->table);
     }
 
     /**

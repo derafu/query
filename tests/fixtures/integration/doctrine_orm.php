@@ -576,6 +576,140 @@ return [
             ],
         ],
 
+        // ----------------------------------------------------------------
+        // EXISTS subquery cases (___) — rendered as DQL SIZE() or EXISTS().
+        // ----------------------------------------------------------------
+
+        'invoices_with_no_payments' => [
+            'description' => 'Invoices that have no payments',
+            'sql' => [
+                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE NOT EXISTS (SELECT 1 FROM payments p WHERE p.invoice_id = i.id)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => Invoice::class,
+                'alias' => 'i',
+                'select' => 'i.id AS id, i.number AS number, i.status AS status',
+                'where' => '___payments[on:id=invoice_id]?is:empty',
+            ],
+        ],
+
+        'invoices_with_payments' => [
+            'description' => 'Invoices that have at least one payment',
+            'sql' => [
+                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE EXISTS (SELECT 1 FROM payments p WHERE p.invoice_id = i.id)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => Invoice::class,
+                'alias' => 'i',
+                'select' => 'i.id AS id, i.number AS number, i.status AS status',
+                'where' => '___payments[on:id=invoice_id]?isnot:empty',
+            ],
+        ],
+
+        'customers_with_no_invoices' => [
+            'description' => 'Customers that have no invoices',
+            'sql' => [
+                'sql' => 'SELECT c.id AS id, c.name AS name FROM customers c WHERE NOT EXISTS (SELECT 1 FROM invoices inv WHERE inv.customer_id = c.id)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => Customer::class,
+                'alias' => 'c',
+                'select' => 'c.id AS id, c.name AS name',
+                'where' => '___invoices[on:id=customer_id]?is:empty',
+            ],
+        ],
+
+        'invoices_with_pending_payment' => [
+            'description' => 'Invoices that have at least one pending payment',
+            'sql' => [
+                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE EXISTS (SELECT 1 FROM payments p WHERE p.invoice_id = i.id AND p.status = :status)',
+                'parameters' => ['status' => 'pending'],
+            ],
+            'query' => [
+                'table' => Invoice::class,
+                'alias' => 'i',
+                'select' => 'i.id AS id, i.number AS number, i.status AS status',
+                'where' => '___payments[on:id=invoice_id]__status?=pending',
+            ],
+        ],
+
+        // Aggregate scalar subquery cases (___assoc__AGG(col)?op:value).
+
+        'invoices_sum_payments_gte' => [
+            'description' => 'Invoices where sum of payments >= 1200',
+            'sql' => [
+                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE (SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id = i.id) >= :value',
+                'parameters' => ['value' => '1200'],
+            ],
+            'query' => [
+                'table' => Invoice::class,
+                'alias' => 'i',
+                'select' => 'i.id AS id, i.number AS number, i.status AS status',
+                'where' => '___payments[on:id=invoice_id]__SUM(amount)?>=1200',
+            ],
+        ],
+
+        'invoices_count_payments_gt' => [
+            'description' => 'Invoices with more than one payment',
+            'sql' => [
+                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE (SELECT COUNT(*) FROM payments p WHERE p.invoice_id = i.id) > :value',
+                'parameters' => ['value' => '1'],
+            ],
+            'query' => [
+                'table' => Invoice::class,
+                'alias' => 'i',
+                'select' => 'i.id AS id, i.number AS number, i.status AS status',
+                'where' => '___payments[on:id=invoice_id]__COUNT(*)?>1',
+            ],
+        ],
+
+        'customers_avg_invoice_total_lt' => [
+            'description' => 'Customers whose average invoice total is less than 1000',
+            'sql' => [
+                'sql' => 'SELECT c.id AS id, c.name AS name FROM customers c WHERE (SELECT AVG(i.total) FROM invoices i WHERE i.customer_id = c.id) < :value',
+                'parameters' => ['value' => '1000'],
+            ],
+            'query' => [
+                'table' => Customer::class,
+                'alias' => 'c',
+                'select' => 'c.id AS id, c.name AS name',
+                'where' => '___invoices[on:id=customer_id]__AVG(total)?<1000',
+            ],
+        ],
+
+        // COUNT(*) = 0 / > 0 rewritten to DQL SIZE() = 0 / > 0.
+
+        'invoices_no_payments_count_zero' => [
+            'description' => 'Invoices with no payments via COUNT(*) = 0 (rewritten to SIZE() = 0)',
+            'sql' => [
+                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE NOT EXISTS (SELECT 1 FROM payments p WHERE p.invoice_id = i.id)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => Invoice::class,
+                'alias' => 'i',
+                'select' => 'i.id AS id, i.number AS number, i.status AS status',
+                'where' => '___payments[on:id=invoice_id]__COUNT(*)?=0',
+            ],
+        ],
+
+        'invoices_has_payments_count_gt_zero' => [
+            'description' => 'Invoices with at least one payment via COUNT(*) > 0 (rewritten to SIZE() > 0)',
+            'sql' => [
+                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE EXISTS (SELECT 1 FROM payments p WHERE p.invoice_id = i.id)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => Invoice::class,
+                'alias' => 'i',
+                'select' => 'i.id AS id, i.number AS number, i.status AS status',
+                'where' => '___payments[on:id=invoice_id]__COUNT(*)?>0',
+            ],
+        ],
+
     ],
 
     // ----------------------------------------------------------------

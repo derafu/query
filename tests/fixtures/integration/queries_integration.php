@@ -755,6 +755,120 @@ return [
             ],
         ],
 
+        // Exists subquery cases (___).
+
+        'invoices_with_no_payments' => [
+            'description' => 'Invoices that have no payments',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices WHERE NOT EXISTS (SELECT 1 FROM payments WHERE invoices.id = payments.invoice_id)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'where' => '___payments[on:id=invoice_id]?is:empty',
+            ],
+        ],
+
+        'invoices_with_payments' => [
+            'description' => 'Invoices that have at least one payment',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices WHERE EXISTS (SELECT 1 FROM payments WHERE invoices.id = payments.invoice_id)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'where' => '___payments[on:id=invoice_id]?isnot:empty',
+            ],
+        ],
+
+        'customers_with_no_invoices' => [
+            'description' => 'Customers that have no invoices',
+            'sql' => [
+                'sql' => 'SELECT * FROM customers WHERE NOT EXISTS (SELECT 1 FROM invoices WHERE customers.id = invoices.customer_id)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'customers',
+                'where' => '___invoices[on:id=customer_id]?is:empty',
+            ],
+        ],
+
+        'invoices_with_pending_payment' => [
+            'description' => 'Invoices that have at least one pending payment',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices WHERE EXISTS (SELECT 1 FROM payments WHERE invoices.id = payments.invoice_id AND payments.status = :status)',
+                'parameters' => ['status' => 'pending'],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'where' => '___payments[on:id=invoice_id]__status?=pending',
+            ],
+        ],
+
+        // Aggregate scalar subquery cases (___assoc__AGG(col)?op:value).
+
+        'invoices_sum_payments_gte' => [
+            'description' => 'Invoices where sum of payments >= 1200',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices WHERE (SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id = invoices.id) >= :value',
+                'parameters' => ['value' => '1200'],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'where' => '___payments[on:id=invoice_id]__SUM(amount)?>=1200',
+            ],
+        ],
+
+        'invoices_count_payments_gt' => [
+            'description' => 'Invoices with more than one payment',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices WHERE (SELECT COUNT(*) FROM payments p WHERE p.invoice_id = invoices.id) > :value',
+                'parameters' => ['value' => '1'],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'where' => '___payments[on:id=invoice_id]__COUNT(*)?>1',
+            ],
+        ],
+
+        'customers_avg_invoice_total_lt' => [
+            'description' => 'Customers whose average invoice total is less than 1000',
+            'sql' => [
+                'sql' => 'SELECT * FROM customers WHERE (SELECT AVG(i.total) FROM invoices i WHERE i.customer_id = customers.id) < :value',
+                'parameters' => ['value' => '1000'],
+            ],
+            'query' => [
+                'table' => 'customers',
+                'where' => '___invoices[on:id=customer_id]__AVG(total)?<1000',
+            ],
+        ],
+
+        // COUNT(*) = 0 / > 0 rewritten to NOT EXISTS / EXISTS.
+
+        'invoices_no_payments_count_zero' => [
+            'description' => 'Invoices with no payments via COUNT(*) = 0 (rewritten to NOT EXISTS)',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices WHERE NOT EXISTS (SELECT 1 FROM payments WHERE invoices.id = payments.invoice_id)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'where' => '___payments[on:id=invoice_id]__COUNT(*)?=0',
+            ],
+        ],
+
+        'invoices_has_payments_count_gt_zero' => [
+            'description' => 'Invoices with at least one payment via COUNT(*) > 0 (rewritten to EXISTS)',
+            'sql' => [
+                'sql' => 'SELECT * FROM invoices WHERE EXISTS (SELECT 1 FROM payments WHERE invoices.id = payments.invoice_id)',
+                'parameters' => [],
+            ],
+            'query' => [
+                'table' => 'invoices',
+                'where' => '___payments[on:id=invoice_id]__COUNT(*)?>0',
+            ],
+        ],
+
         'path_self_join_simulation' => [
             'description' => 'Simulated self-join using paths',
             'sql' => [

@@ -50,24 +50,32 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
      * {@inheritDoc}
      */
     public function build(
-        ConditionInterface|CompositeConditionInterface $condition
+        ConditionInterface|CompositeConditionInterface $condition,
+        string $parentAlias = ''
     ): QueryInterface {
         if ($condition instanceof ConditionInterface) {
-            return $this->buildCondition($condition);
+            return $this->buildCondition($condition, $parentAlias);
         }
 
-        return $this->buildCompositeCondition($condition);
+        return $this->buildCompositeCondition($condition, $parentAlias);
     }
 
     /**
      * Builds a query from a simple condition.
      *
      * @param ConditionInterface $condition
+     * @param string $parentAlias Alias or name of the driving table for EXISTS paths.
      * @return QueryInterface The built where section of the query.
      */
     private function buildCondition(
-        ConditionInterface $condition
+        ConditionInterface $condition,
+        string $parentAlias = ''
     ): QueryInterface {
+        // EXISTS path: first segment carries subquery:exists.
+        if ($condition->getPath()->getFirstSegment()->getOption('subquery') === 'exists') {
+            return $this->buildExistsCondition($condition, $parentAlias);
+        }
+
         // Get path and filter.
         $path = $condition->getPath();
         $filter = $condition->getFilter();
@@ -158,16 +166,18 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
      * Builds a query from a composite condition.
      *
      * @param CompositeConditionInterface $composite
+     * @param string $parentAlias Alias or name of the driving table for EXISTS paths.
      * @return QueryInterface The built where section of the query.
      */
     private function buildCompositeCondition(
-        CompositeConditionInterface $composite
+        CompositeConditionInterface $composite,
+        string $parentAlias = ''
     ): QueryInterface {
         $conditions = [];
         $parameters = [];
 
         foreach ($composite->getConditions() as $condition) {
-            $result = $this->build($condition);
+            $result = $this->build($condition, $parentAlias);
 
             $query = $result->getQuery();
             $conditions[] = $query['sql'];
@@ -373,6 +383,261 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
             'sql' => $sql,
             'parameters' => $parameters,
         ];
+    }
+
+    /**
+     * Builds a correlated EXISTS / NOT EXISTS subquery from an exists path.
+     *
+     * EXISTS paths start with ___ and carry a synthetic 'subquery' => 'exists'
+     * option on every entry segment. The operator determines the wrapping:
+     *   - 'is:empty'    → NOT EXISTS (no child record must match)
+     *   - 'isnot:empty' → EXISTS     (at least one child record)
+     *   - any other     → EXISTS with the operator applied to the column segment
+     *
+     * Nested ___ segments are joined flat inside the EXISTS subquery.
+     *
+     * @param ConditionInterface $condition The EXISTS condition.
+     * @param string $parentAlias Alias or name of the outer driving table.
+     */
+    private function buildExistsCondition(
+        ConditionInterface $condition,
+        string $parentAlias
+    ): QueryInterface {
+        $segments  = $condition->getPath()->getSegments();
+        $filter    = $condition->getFilter();
+        $operator  = $filter->getOperator();
+        $baseOp    = $operator->getBaseOperator();
+        $effective = $baseOp ?? $operator;
+
+        // Separate EXISTS entry segments from the optional column segment.
+        $existsSegments = [];
+        $columnSegment  = null;
+        foreach ($segments as $segment) {
+            if ($segment->getOption('subquery') === 'exists') {
+                $existsSegments[] = $segment;
+            } else {
+                $columnSegment = $segment;
+            }
+        }
+
+        // Operator determines EXISTS vs NOT EXISTS.
+        $isNotExists  = ($effective->getSymbol() === 'is:empty');
+        $existsPrefix = $isNotExists ? 'NOT EXISTS' : 'EXISTS';
+
+        // Primary EXISTS table (first entry segment).
+        $primary          = $existsSegments[0];
+        $primaryTable     = $this->sanitizeSqlSimpleIdentifier($primary->getName());
+        $primaryAlias     = $primary->getOption('alias');
+        $primaryAliasOrName = $primaryAlias ?? $primary->getName();
+        $subqueryFrom     = $primaryAlias !== null
+            ? $primaryTable . ' AS ' . $this->sanitizeSqlSimpleIdentifier($primaryAlias)
+            : $primaryTable;
+
+        // Correlation condition: parentAlias.col = primaryTable.col (from on: option).
+        $whereParts = [];
+        foreach ($primary->getOption('on', []) as $parentCol => $childCol) {
+            $whereParts[] = sprintf(
+                '%s.%s = %s.%s',
+                $this->sanitizeSqlSimpleIdentifier($parentAlias),
+                $this->sanitizeSqlSimpleIdentifier($parentCol),
+                $this->sanitizeSqlSimpleIdentifier($primaryAliasOrName),
+                $this->sanitizeSqlSimpleIdentifier($childCol)
+            );
+        }
+
+        // JOINs for nested EXISTS segments (e.g. ___payments___items).
+        $joins              = '';
+        $prevAliasOrName    = $primaryAliasOrName;
+        $lastExistsAlias    = $primaryAliasOrName;
+
+        for ($i = 1; $i < count($existsSegments); $i++) {
+            $seg           = $existsSegments[$i];
+            $segTable      = $this->sanitizeSqlSimpleIdentifier($seg->getName());
+            $segAlias      = $seg->getOption('alias');
+            $segAliasOrName = $segAlias ?? $seg->getName();
+            $segRef        = $segAlias !== null
+                ? $segTable . ' AS ' . $this->sanitizeSqlSimpleIdentifier($segAlias)
+                : $segTable;
+
+            $joinParts = [];
+            foreach ($seg->getOption('on', []) as $prevCol => $segCol) {
+                $joinParts[] = sprintf(
+                    '%s.%s = %s.%s',
+                    $this->sanitizeSqlSimpleIdentifier($prevAliasOrName),
+                    $this->sanitizeSqlSimpleIdentifier($prevCol),
+                    $this->sanitizeSqlSimpleIdentifier($segAliasOrName),
+                    $this->sanitizeSqlSimpleIdentifier($segCol)
+                );
+            }
+
+            $joins .= ' JOIN ' . $segRef;
+            if (!empty($joinParts)) {
+                $joins .= ' ON ' . implode(' AND ', $joinParts);
+            }
+
+            $prevAliasOrName = $segAliasOrName;
+            $lastExistsAlias = $segAliasOrName;
+        }
+
+        // Aggregate scalar subquery: ___table__AGG(col)?op:value
+        if (
+            $columnSegment !== null
+            && preg_match('/^(SUM|AVG|COUNT|MIN|MAX)\s*\((.+)\)$/i', $columnSegment->getName(), $m)
+        ) {
+            return $this->buildAggregateSubquery(
+                $condition,
+                $parentAlias,
+                $primary,
+                strtoupper($m[1]),
+                trim($m[2])
+            );
+        }
+
+        // Column filter inside the EXISTS subquery (e.g. ___payments__status?=pending).
+        $parameters = [];
+
+        if ($columnSegment !== null) {
+            $templates   = $operator->get('sql') ?? $baseOp?->get('sql');
+            $filterSql   = is_string($templates) ? $templates : ($templates[$this->engine] ?? null);
+
+            if (!empty($filterSql)) {
+                $qualifiedColumn = $this->sanitizeSqlIdentifier(
+                    $lastExistsAlias . '.' . $columnSegment->getName()
+                );
+
+                $value = $this->normalizeValue($filter->getValue());
+                $value = $this->castValue(
+                    $value,
+                    (array)($operator->getCastingRules() ?: $baseOp?->getCastingRules())
+                );
+
+                $parameters   = $this->createParameters($value, $columnSegment->getName());
+                $innerResult  = $this->createWhere($filterSql, $qualifiedColumn, $parameters);
+                $whereParts[] = $innerResult['sql'];
+                $parameters   = $innerResult['parameters'];
+            }
+        }
+
+        $subquery = 'SELECT 1 FROM ' . $subqueryFrom . $joins;
+        if (!empty($whereParts)) {
+            $subquery .= ' WHERE ' . implode(' AND ', $whereParts);
+        }
+
+        return new SqlQuery($existsPrefix . ' (' . $subquery . ')', $parameters);
+    }
+
+    /**
+     * Builds a scalar aggregate subquery condition.
+     *
+     * Produces: (SELECT AGG(alias.col) FROM table alias WHERE correlation) op :param
+     *
+     * @param ConditionInterface $condition The aggregate condition.
+     * @param string $parentAlias Alias or name of the driving table (outer query).
+     * @param object $primary The first EXISTS segment (table + options).
+     * @param string $funcName Whitelisted aggregate function name (SUM, AVG, etc.).
+     * @param string $funcArg Raw argument from path (e.g. "amount" or "*").
+     */
+    private function buildAggregateSubquery(
+        ConditionInterface $condition,
+        string $parentAlias,
+        object $primary,
+        string $funcName,
+        string $funcArg
+    ): QueryInterface {
+        $filter    = $condition->getFilter();
+        $operator  = $filter->getOperator();
+        $baseOp    = $operator->getBaseOperator();
+        $effective = $baseOp ?? $operator;
+
+        $primaryTable = $this->sanitizeSqlSimpleIdentifier($primary->getName());
+        $subAlias     = $primary->getOption('alias') ?? strtolower($primary->getName()[0]);
+
+        $subqueryFrom = $primaryTable . ' ' . $this->sanitizeSqlSimpleIdentifier($subAlias);
+
+        // Rebuild correlation using the resolved subAlias (explicit alias may differ from auto).
+        $whereParts = [];
+        foreach ($primary->getOption('on', []) as $parentCol => $childCol) {
+            $whereParts[] = sprintf(
+                '%s.%s = %s.%s',
+                $this->sanitizeSqlSimpleIdentifier($parentAlias),
+                $this->sanitizeSqlSimpleIdentifier($parentCol),
+                $this->sanitizeSqlSimpleIdentifier($subAlias),
+                $this->sanitizeSqlSimpleIdentifier($childCol)
+            );
+        }
+
+        // COUNT(*) = 0 / > 0 → rewrite to NOT EXISTS / EXISTS (avoids full aggregate scan).
+        if ($funcArg === '*') {
+            $existsPrefix = $this->resolveCountStarToExistsPrefix($effective, $filter->getValue());
+            if ($existsPrefix !== null) {
+                $inner = 'SELECT 1 FROM ' . $subqueryFrom;
+                if (!empty($whereParts)) {
+                    $inner .= ' WHERE ' . implode(' AND ', $whereParts);
+                }
+                return new SqlQuery($existsPrefix . ' (' . $inner . ')', []);
+            }
+        }
+
+        // Build aggregate expression; * is kept as-is to support COUNT(*).
+        if ($funcArg === '*') {
+            $aggExpr = $funcName . '(*)';
+        } else {
+            $aggExpr = $funcName . '(' . $this->sanitizeSqlSimpleIdentifier($subAlias)
+                . '.' . $this->sanitizeSqlSimpleIdentifier($funcArg) . ')';
+        }
+
+        $subquery = '(SELECT ' . $aggExpr . ' FROM ' . $subqueryFrom;
+        if (!empty($whereParts)) {
+            $subquery .= ' WHERE ' . implode(' AND ', $whereParts);
+        }
+        $subquery .= ')';
+
+        // Get comparison operator SQL template.
+        $templates = $operator->get('sql') ?? $baseOp?->get('sql');
+        $filterSql = is_string($templates) ? $templates : ($templates[$this->engine] ?? null);
+
+        if (empty($filterSql)) {
+            throw new InvalidArgumentException(sprintf(
+                'No SQL template for operator %s on engine %s.',
+                $operator->getSymbol(),
+                $this->engine
+            ));
+        }
+
+        // Create parameters from the filter value.
+        $value      = $this->normalizeValue($filter->getValue());
+        $value      = $this->castValue(
+            $value,
+            (array)($operator->getCastingRules() ?: $baseOp?->getCastingRules())
+        );
+        $parameters = $this->createParameters($value, $funcName);
+
+        return new SqlQuery(...$this->createWhere($filterSql, $subquery, $parameters));
+    }
+
+    /**
+     * Maps COUNT(*) existence conditions to EXISTS / NOT EXISTS.
+     *
+     * Returns the SQL prefix ('EXISTS' or 'NOT EXISTS') when the operator and
+     * value form a pure existence check, or null when the condition is not
+     * rewritable (e.g. COUNT(*) > 5 must remain a scalar aggregate subquery).
+     */
+    private function resolveCountStarToExistsPrefix(object $effective, mixed $value): ?string
+    {
+        $symbol = $effective->getSymbol();
+        $v      = trim((string)($value ?? ''));
+
+        return match (true) {
+            $symbol === 'is:empty'                   => 'NOT EXISTS',
+            $symbol === 'isnot:empty'                => 'EXISTS',
+            $symbol === '='  && $v === '0'           => 'NOT EXISTS',
+            $symbol === '!=' && $v === '0'           => 'EXISTS',
+            $symbol === '>'  && $v === '0'           => 'EXISTS',
+            $symbol === '>=' && $v === '1'           => 'EXISTS',
+            $symbol === '<'  && $v === '1'           => 'NOT EXISTS',
+            $symbol === '<=' && $v === '0'           => 'NOT EXISTS',
+            default                                  => null,
+        };
     }
 
     /**

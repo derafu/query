@@ -169,6 +169,108 @@ return [
                 'segment_options' => [[], []],
             ],
         ],
+
+        // Exists paths (___): collection check only (no child column).
+        [
+            'expression' => '___payments[on:id=invoice_id]',
+            'expected' => [
+                'segments_count' => 1,
+                'segment_names' => ['payments'],
+                'segment_options' => [
+                    ['on' => ['id' => 'invoice_id'], 'subquery' => 'exists'],
+                ],
+            ],
+        ],
+
+        // Exists path: filter on a child column.
+        [
+            'expression' => '___payments[on:id=invoice_id]__status',
+            'expected' => [
+                'segments_count' => 2,
+                'segment_names' => ['payments', 'status'],
+                'segment_options' => [
+                    ['on' => ['id' => 'invoice_id'], 'subquery' => 'exists'],
+                    [],
+                ],
+            ],
+        ],
+
+        // Exists path: with alias on the child table.
+        [
+            'expression' => '___payments[alias:p,on:id=invoice_id]__status',
+            'expected' => [
+                'segments_count' => 2,
+                'segment_names' => ['payments', 'status'],
+                'segment_options' => [
+                    ['alias' => 'p', 'on' => ['id' => 'invoice_id'], 'subquery' => 'exists'],
+                    [],
+                ],
+            ],
+        ],
+
+        // Exists path: table name containing underscores (not a separator).
+        [
+            'expression' => '___invoice_details[on:id=invoice_id]__product_id',
+            'expected' => [
+                'segments_count' => 2,
+                'segment_names' => ['invoice_details', 'product_id'],
+                'segment_options' => [
+                    ['on' => ['id' => 'invoice_id'], 'subquery' => 'exists'],
+                    [],
+                ],
+            ],
+        ],
+
+        // Nested exists: child of child.
+        [
+            'expression' => '___payments[on:id=invoice_id]___items[on:id=payment_id]__amount',
+            'expected' => [
+                'segments_count' => 3,
+                'segment_names' => ['payments', 'items', 'amount'],
+                'segment_options' => [
+                    ['on' => ['id' => 'invoice_id'], 'subquery' => 'exists'],
+                    ['on' => ['id' => 'payment_id'], 'subquery' => 'exists'],
+                    [],
+                ],
+            ],
+        ],
+
+        // Aggregate function as the column segment in an exists path.
+        [
+            'expression' => '___payments[on:id=invoice_id]__SUM(amount)',
+            'expected' => [
+                'segments_count' => 2,
+                'segment_names' => ['payments', 'SUM(amount)'],
+                'segment_options' => [
+                    ['on' => ['id' => 'invoice_id'], 'subquery' => 'exists'],
+                    [],
+                ],
+            ],
+        ],
+
+        [
+            'expression' => '___payments[on:id=invoice_id]__COUNT(*)',
+            'expected' => [
+                'segments_count' => 2,
+                'segment_names' => ['payments', 'COUNT(*)'],
+                'segment_options' => [
+                    ['on' => ['id' => 'invoice_id'], 'subquery' => 'exists'],
+                    [],
+                ],
+            ],
+        ],
+
+        [
+            'expression' => '___invoices[on:id=customer_id]__AVG(total)',
+            'expected' => [
+                'segments_count' => 2,
+                'segment_names' => ['invoices', 'AVG(total)'],
+                'segment_options' => [
+                    ['on' => ['id' => 'customer_id'], 'subquery' => 'exists'],
+                    [],
+                ],
+            ],
+        ],
     ],
 
     // Invalid path expressions (FAIL).
@@ -192,5 +294,9 @@ return [
         // Invalid equals syntax
         ['expression' => 'invoices__customers[on:=id]'],      // Empty left side
         ['expression' => 'invoices__customers[on:customer_id=]'], // Empty right side
+
+        // Invalid exists paths (___)
+        ['expression' => '___'],                               // Just the separator, empty body
+        ['expression' => '___payments__'],                     // Trailing join separator
     ],
 ];

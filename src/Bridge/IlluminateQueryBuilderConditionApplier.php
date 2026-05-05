@@ -47,7 +47,8 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
 
         ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql(
             $this->resolveDriver($qb),
-            $condition
+            $condition,
+            $this->getFromAliasOrTable($qb)
         );
 
         $qb->whereRaw($sql, $params);
@@ -140,6 +141,28 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
                 };
             }
         }
+    }
+
+    /**
+     * Returns the alias (if any) or raw table name from the FROM clause,
+     * lower-cased. Used as parentAlias in EXISTS correlation conditions.
+     *
+     * Illuminate stores FROM as a plain string like "invoices" or
+     * "invoices as i", so we extract the alias when present.
+     */
+    private function getFromAliasOrTable(QueryBuilder $qb): string
+    {
+        $from = property_exists($qb, 'from') ? (string)$qb->from : '';
+
+        if ($from === '') {
+            return '';
+        }
+
+        if (preg_match('/\s+as\s+(\S+)$/i', $from, $m)) {
+            return strtolower($m[1]);
+        }
+
+        return strtolower($from);
     }
 
     /**

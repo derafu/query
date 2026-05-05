@@ -32,6 +32,10 @@ types:
         name: 'NULL Operators'
         description: 'Operators for handling NULL values.'
 
+    'subquery':
+        name: 'Subquery Operators'
+        description: 'Operators that generate correlated EXISTS subqueries on child collections.'
+
     'regexp':
         name: 'Regular Expression Operators'
         description: 'Pattern matching using regular expressions.'
@@ -337,6 +341,21 @@ operators:
         pattern: '/^$/'
         examples: ['isnot:null']
         sql: '{{column}} IS NOT NULL'
+
+    # Subquery operators (for ___ exists paths).
+    'is:empty':
+        type: 'subquery'
+        name: 'Is Empty'
+        description: 'Matches empty child collections (no related records exist).'
+        pattern: '/^$/'
+        examples: ['is:empty']
+
+    'isnot:empty':
+        type: 'subquery'
+        name: 'Is Not Empty'
+        description: 'Matches non-empty child collections (at least one related record exists).'
+        pattern: '/^$/'
+        examples: ['isnot:empty']
 
     # Regular expression operators.
     '~':

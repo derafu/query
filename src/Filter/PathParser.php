@@ -41,6 +41,10 @@ final class PathParser implements PathParserInterface
             );
         }
 
+        if (str_starts_with($expression, '___')) {
+            return $this->parseExistsPath(substr($expression, 3));
+        }
+
         $parts = explode('__', $expression);
         $segments = [];
 
@@ -52,15 +56,50 @@ final class PathParser implements PathParserInterface
     }
 
     /**
+     * Parses an exists-subquery path (one that started with ___).
+     *
+     * The body is split on ___ to obtain nesting levels. Within each level
+     * segments are separated by __. The first segment of every level receives
+     * a synthetic 'subquery' => 'exists' option so that SQL/DQL builders know
+     * to open a correlated EXISTS clause at that point.
+     *
+     * @throws InvalidArgumentException If the body is empty or any segment is invalid.
+     */
+    private function parseExistsPath(string $body): PathInterface
+    {
+        if (empty($body)) {
+            throw new InvalidArgumentException(
+                'Exists path body cannot be empty after ___.'
+            );
+        }
+
+        $levels = explode('___', $body);
+        $segments = [];
+
+        foreach ($levels as $level) {
+            $parts = explode('__', $level);
+
+            foreach ($parts as $index => $part) {
+                $synthetic = ($index === 0) ? ['subquery' => 'exists'] : [];
+                $segments[] = $this->parseSegment($part, $synthetic);
+            }
+        }
+
+        return new Path($segments);
+    }
+
+    /**
      * Parses a single segment of the path.
      *
      * Each segment represents a field/column name with optional metadata.
      *
      * @param string $expression The segment expression to parse.
+     * @param array<string,mixed> $syntheticOptions Options injected by the parser
+     *        (appended after user-defined options).
      * @return Segment The parsed segment.
      * @throws InvalidArgumentException If segment format is invalid.
      */
-    private function parseSegment(string $expression): Segment
+    private function parseSegment(string $expression, array $syntheticOptions = []): Segment
     {
         $name = $expression;
         $options = [];
@@ -91,7 +130,7 @@ final class PathParser implements PathParserInterface
 
         return new Segment(
             name: $name,
-            options: $options
+            options: array_merge($options, $syntheticOptions)
         );
     }
 

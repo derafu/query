@@ -42,15 +42,18 @@ trait ConditionApplierTrait
     /**
      * Compiles a condition tree into a SQL fragment and its named parameters.
      *
+     * @param string $parentAlias Alias (or name) of the FROM table, required
+     *        when the condition tree contains EXISTS subquery paths (___).
      * @return array{sql: string, parameters: array<string, mixed>}
      */
     protected function buildConditionSql(
         string $driver,
-        ConditionInterface|CompositeConditionInterface $condition
+        ConditionInterface|CompositeConditionInterface $condition,
+        string $parentAlias = ''
     ): array {
         $this->sqlBuilderCache[$driver] ??= new SqlBuilderWhere($driver);
 
-        return $this->sqlBuilderCache[$driver]->build($condition)->getQuery();
+        return $this->sqlBuilderCache[$driver]->build($condition, $parentAlias)->getQuery();
     }
 
     /**

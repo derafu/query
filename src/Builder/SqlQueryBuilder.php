@@ -505,7 +505,8 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         // Build WHERE clause.
         if (isset($this->where)) {
             $this->conditionBuilder ??= new SqlBuilderWhere($this->engine->getDriver());
-            $result = $this->conditionBuilder->build($this->where)->getQuery();
+            $parentAlias = $this->alias ?? $this->table ?? '';
+            $result = $this->conditionBuilder->build($this->where, $parentAlias)->getQuery();
             $sql .= ' WHERE ' . $result['sql'];
             $parameters = $result['parameters'];
         }

@@ -44,9 +44,12 @@ interface QueryBuilderWhereInterface
      * Builds a query from a condition (simple or composite).
      *
      * @param ConditionInterface|CompositeConditionInterface $condition
+     * @param string $parentAlias Alias (or name) of the FROM table, required
+     *        when the condition tree contains EXISTS subquery paths (___).
      * @return QueryInterface The built where section of the query.
      */
     public function build(
-        ConditionInterface|CompositeConditionInterface $condition
+        ConditionInterface|CompositeConditionInterface $condition,
+        string $parentAlias = ''
     ): QueryInterface;
 }
