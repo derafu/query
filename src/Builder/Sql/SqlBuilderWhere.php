@@ -17,8 +17,8 @@ use Derafu\Query\Builder\Contract\QueryInterface;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Contract\PathInterface;
-use InvalidArgumentException;
-use UnderflowException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Derafu\Translation\Exception\Runtime\TranslatableUnderflowException as UnderflowException;
 
 /**
  * SQL query builder implementation.
@@ -93,13 +93,11 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         }
 
         if (empty($sql)) {
-            throw new InvalidArgumentException(
-                sprintf(
-                    'No SQL template for operator %s on engine %s.',
-                    $operator->getSymbol(),
-                    $this->engine
-                )
-            );
+            throw new InvalidArgumentException([
+                'No SQL template for operator {operator} on engine {engine}.',
+                'operator' => $operator->getSymbol(),
+                'engine' => (string) $this->engine,
+            ]);
         }
 
         // Get value.
@@ -115,13 +113,11 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
             ;
             if ($pattern !== null && $value !== null) {
                 if (!preg_match($pattern, $value)) {
-                    throw new InvalidArgumentException(
-                        sprintf(
-                            'Invalid value format for operator %s: %s.',
-                            $operator->getSymbol(),
-                            $value
-                        )
-                    );
+                    throw new InvalidArgumentException([
+                        'Invalid value format for operator {operator}: {value}.',
+                        'operator' => $operator->getSymbol(),
+                        'value' => (string) $value,
+                    ]);
                 }
             }
 
@@ -353,7 +349,9 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         // Handle single value.
         if (str_contains($sql, '{{value}}')) {
             if (!isset($parameterKeys[0])) {
-                throw new UnderflowException('Missing parameter for {{value}}.');
+                throw new UnderflowException(
+                    ['Missing parameter for {placeholder}.', 'placeholder' => '{{value}}']
+                );
             }
             $sql = str_replace('{{value}}', $parameterKeys[0], $sql);
         }
@@ -361,9 +359,11 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         // Handle paired values.
         elseif (str_contains($sql, '{{value_1}}')) {
             if (!isset($parameterKeys[0], $parameterKeys[1])) {
-                throw new UnderflowException(
-                    'Missing parameters for {{value_1}} or {{value_2}}.'
-                );
+                throw new UnderflowException([
+                    'Missing parameters for {placeholder_1} or {placeholder_2}.',
+                    'placeholder_1' => '{{value_1}}',
+                    'placeholder_2' => '{{value_2}}',
+                ]);
             }
             $sql = strtr($sql, [
                 '{{value_1}}' => $parameterKeys[0],
@@ -374,7 +374,9 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         // Handle value lists.
         elseif (str_contains($sql, '{{values}}')) {
             if (empty($parameterKeys)) {
-                throw new UnderflowException('Missing parameters for {{values}}.');
+                throw new UnderflowException(
+                    ['Missing parameters for {placeholder}.', 'placeholder' => '{{values}}']
+                );
             }
             $sql = str_replace('{{values}}', implode(', ', $parameterKeys), $sql);
         }
@@ -597,11 +599,11 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         $filterSql = is_string($templates) ? $templates : ($templates[$this->engine] ?? null);
 
         if (empty($filterSql)) {
-            throw new InvalidArgumentException(sprintf(
-                'No SQL template for operator %s on engine %s.',
-                $operator->getSymbol(),
-                $this->engine
-            ));
+            throw new InvalidArgumentException([
+                'No SQL template for operator {operator} on engine {engine}.',
+                'operator' => $operator->getSymbol(),
+                'engine' => (string) $this->engine,
+            ]);
         }
 
         // Create parameters from the filter value.

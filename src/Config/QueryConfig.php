@@ -14,7 +14,7 @@ namespace Derafu\Query\Config;
 
 use Derafu\Query\Builder\Contract\QueryBuilderInterface;
 use Derafu\Query\Config\Contract\QueryConfigInterface;
-use InvalidArgumentException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Query configuration.
@@ -108,7 +108,10 @@ class QueryConfig implements QueryConfigInterface
         return match(strtolower($extension)) {
             'yml', 'yaml' => self::fromYamlFile($filePath),
             'json' => self::fromJsonFile($filePath),
-            default => throw new InvalidArgumentException("Unsupported file extension: {$extension}")
+            default => throw new InvalidArgumentException([
+                'Unsupported file extension: {extension}',
+                'extension' => $extension,
+            ])
         };
     }
 

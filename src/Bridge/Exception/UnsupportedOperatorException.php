@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Bridge\Exception;
 
-use RuntimeException;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 
 /**
  * Thrown when an operator is used in a context that does not support it.
@@ -26,10 +26,10 @@ final class UnsupportedOperatorException extends RuntimeException
 {
     public static function forOperator(string $symbol, string $reason = ''): self
     {
-        return new self(sprintf(
-            'Operator "%s" is not supported in DQL context%s.',
-            $symbol,
-            $reason !== '' ? ': ' . $reason : ''
-        ));
+        return new self([
+            'Operator "{symbol}" is not supported in DQL context{reason}.',
+            'symbol' => $symbol,
+            'reason' => $reason !== '' ? ': ' . $reason : '',
+        ]);
     }
 }

@@ -14,7 +14,7 @@ namespace Derafu\Query\Filter;
 
 use Derafu\Query\Filter\Contract\PathInterface;
 use Derafu\Query\Filter\Contract\SegmentInterface;
-use InvalidArgumentException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Immutable value object representing a parsed relation path.

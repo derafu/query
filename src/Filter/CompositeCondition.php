@@ -14,7 +14,7 @@ namespace Derafu\Query\Filter;
 
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
-use InvalidArgumentException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Implementation of composite query conditions.
@@ -48,13 +48,11 @@ final class CompositeCondition implements CompositeConditionInterface
         private readonly string $type
     ) {
         if (!in_array($type, self::VALID_TYPES)) {
-            throw new InvalidArgumentException(
-                sprintf(
-                    'Invalid composite type: "%s". Must be one of: %s.',
-                    $type,
-                    implode(', ', self::VALID_TYPES)
-                )
-            );
+            throw new InvalidArgumentException([
+                'Invalid composite type: "{type}". Must be one of: {types}.',
+                'type' => $type,
+                'types' => implode(', ', self::VALID_TYPES),
+            ]);
         }
     }
 

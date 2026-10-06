@@ -13,9 +13,9 @@ declare(strict_types=1);
 namespace Derafu\Query\Operator;
 
 use Derafu\Query\Operator\Contract\OperatorLoaderInterface;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Exception;
-use InvalidArgumentException;
-use RuntimeException;
 use Symfony\Component\Yaml\Yaml;
 
 /**
@@ -45,7 +45,7 @@ final class OperatorLoader implements OperatorLoaderInterface
     {
         if (!file_exists($path)) {
             throw new InvalidArgumentException(
-                sprintf('Configuration file not found: %s', $path)
+                ['Configuration file not found: {path}', 'path' => $path]
             );
         }
 
@@ -53,7 +53,7 @@ final class OperatorLoader implements OperatorLoaderInterface
             $content = Yaml::parseFile($path);
         } catch (Exception $e) {
             throw new RuntimeException(
-                sprintf('Failed to parse YAML file: %s', $e->getMessage())
+                ['Failed to parse YAML file: {error}', 'error' => $e->getMessage()]
             );
         }
 
@@ -76,7 +76,7 @@ final class OperatorLoader implements OperatorLoaderInterface
             $type = $operatorConfig['type'] ?? null;
             if ($type && !isset($config['types'][$type])) {
                 throw new RuntimeException(
-                    sprintf('Undefined operator type: %s.', $type)
+                    ['Undefined operator type: {type}.', 'type' => (string) $type]
                 );
             }
 
@@ -84,11 +84,11 @@ final class OperatorLoader implements OperatorLoaderInterface
             if ($use !== null) {
                 if (!isset($operators[$use])) {
                     throw new InvalidArgumentException(
-                        sprintf(
-                            'Operator %s requires unloaded operator: %s.',
-                            $symbol,
-                            $use
-                        )
+                        [
+                            'Operator {symbol} requires unloaded operator: {required}.',
+                            'symbol' => (string) $symbol,
+                            'required' => (string) $use,
+                        ]
                     );
                 }
 
@@ -116,11 +116,11 @@ final class OperatorLoader implements OperatorLoaderInterface
             // Check symbol matches configuration.
             if ($symbol !== $operator->getSymbol()) {
                 throw new RuntimeException(
-                    sprintf(
-                        'Symbol mismatch: Expected "%s" but got "%s" in configuration.',
-                        $symbol,
-                        $operator->getSymbol()
-                    )
+                    [
+                        'Symbol mismatch: Expected "{expected}" but got "{actual}" in configuration.',
+                        'expected' => (string) $symbol,
+                        'actual' => $operator->getSymbol(),
+                    ]
                 );
             }
 
@@ -129,22 +129,22 @@ final class OperatorLoader implements OperatorLoaderInterface
                 $value = $operator->get($field);
                 if ($value === null) {
                     throw new RuntimeException(
-                        sprintf(
-                            'Missing required field "%s" for operator "%s".',
-                            $field,
-                            $symbol
-                        )
+                        [
+                            'Missing required field "{field}" for operator "{operator}".',
+                            'field' => (string) $field,
+                            'operator' => (string) $symbol,
+                        ]
                     );
                 }
                 if (gettype($value) !== $type) {
                     throw new RuntimeException(
-                        sprintf(
-                            'Invalid type for field "%s" in operator "%s": Expected "%s" but got "%s".',
-                            $field,
-                            $symbol,
-                            $type,
-                            gettype($value)
-                        )
+                        [
+                            'Invalid type for field "{field}" in operator "{operator}": Expected "{expected}" but got "{actual}".',
+                            'field' => (string) $field,
+                            'operator' => (string) $symbol,
+                            'expected' => (string) $type,
+                            'actual' => gettype($value),
+                        ]
                     );
                 }
             }

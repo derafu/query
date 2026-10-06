@@ -112,7 +112,7 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
     ): void {
         $paths = $this->extractPaths($condition);
 
-        $currentFrom = property_exists($qb, 'from') ? (string)$qb->from : '';
+        $currentFrom = (string)$qb->from;
         $fromTable = strtolower(trim(preg_replace('/\s+as\s+\S+$/i', '', $currentFrom) ?? ''));
 
         if (empty($fromTable)) {
@@ -152,7 +152,7 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
      */
     private function getFromAliasOrTable(QueryBuilder $qb): string
     {
-        $from = property_exists($qb, 'from') ? (string)$qb->from : '';
+        $from = (string)$qb->from;
 
         if ($from === '') {
             return '';
@@ -170,7 +170,7 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
      */
     private function hasJoin(QueryBuilder $qb, string $tableRef): bool
     {
-        $joins = property_exists($qb, 'joins') ? $qb->joins : null;
+        $joins = $qb->joins;
         if (empty($joins)) {
             return false;
         }

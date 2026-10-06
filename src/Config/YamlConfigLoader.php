@@ -13,8 +13,8 @@ declare(strict_types=1);
 namespace Derafu\Query\Config;
 
 use Derafu\Query\Config\Contract\ConfigLoaderInterface;
-use InvalidArgumentException;
-use RuntimeException;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
@@ -31,14 +31,15 @@ class YamlConfigLoader implements ConfigLoaderInterface
     public function loadFromFile(string $filePath): array
     {
         if (!file_exists($filePath) || !is_readable($filePath)) {
-            throw new RuntimeException(
-                "Cannot read configuration file: {$filePath}"
-            );
+            throw new RuntimeException([
+                'Cannot read configuration file: {path}',
+                'path' => $filePath,
+            ]);
         }
 
         $content = file_get_contents($filePath);
         if ($content === false) {
-            throw new RuntimeException("Failed to read file: {$filePath}");
+            throw new RuntimeException(['Failed to read file: {path}', 'path' => $filePath]);
         }
 
         return $this->loadFromString($content);
@@ -59,7 +60,7 @@ class YamlConfigLoader implements ConfigLoaderInterface
             return $config;
         } catch (ParseException $e) {
             throw new InvalidArgumentException(
-                "Error parsing YAML file: {$e->getMessage()}",
+                ['Error parsing YAML file: {error}', 'error' => $e->getMessage()],
                 0,
                 $e
             );

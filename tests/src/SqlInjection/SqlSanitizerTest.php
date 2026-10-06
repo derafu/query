@@ -13,11 +13,11 @@ declare(strict_types=1);
 namespace Derafu\TestsQuery\SqlInjection;
 
 use Derafu\Query\Builder\Sql\SqlSanitizerTrait;
-use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-#[CoversClass(SqlSanitizerTrait::class)]
+#[CoversTrait(SqlSanitizerTrait::class)]
 class SqlSanitizerTest extends TestCase
 {
     private $sanitizer;

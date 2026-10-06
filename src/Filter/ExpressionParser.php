@@ -45,9 +45,7 @@ class ExpressionParser implements ExpressionParserInterface
         $pos = strpos($expression, '?E');
         if ($pos !== false) {
             $literalCondition = false;
-            if ($pos !== false) {
-                $expression = substr_replace($expression, '?', $pos, 2);
-            }
+            $expression = substr_replace($expression, '?', $pos, 2);
         } else {
             $literalCondition = true;
         }

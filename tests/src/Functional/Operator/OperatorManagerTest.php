@@ -198,7 +198,7 @@ final class OperatorManagerTest extends TestCase
         string $symbol,
         array $config
     ): OperatorInterface {
-        $mockConfig = $this->createMock(OperatorInterface::class);
+        $mockConfig = $this->createStub(OperatorInterface::class);
         $mockConfig->method('getSymbol')->willReturn($symbol);
         $mockConfig->method('getType')->willReturn($config['type']);
         $mockConfig->method('getName')->willReturn($config['name']);

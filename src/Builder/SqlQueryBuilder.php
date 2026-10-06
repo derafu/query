@@ -23,8 +23,8 @@ use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Contract\ExpressionParserInterface;
 use Derafu\Query\Filter\Contract\PathInterface;
-use InvalidArgumentException;
-use RuntimeException;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * SQL implementation of the query builder.
@@ -408,10 +408,10 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         if (!isset($this->joins[$table])) {
             $type = strtoupper($type);
             if (!in_array($type, ['INNER', 'LEFT', 'RIGHT', 'CROSS'])) {
-                throw new InvalidArgumentException(sprintf(
-                    'Invalid join type %s.',
-                    $type
-                ));
+                throw new InvalidArgumentException([
+                    'Invalid join type {type}.',
+                    'type' => $type,
+                ]);
             }
 
             $id = $table . ':' . ($alias ?? $table);
@@ -476,7 +476,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
 
         // Build SELECT clause.
         $sql = 'SELECT ';
-        if (isset($this->distinct) && $this->distinct) {
+        if ($this->distinct) {
             $sql .= 'DISTINCT ';
         }
         $sql .= implode(', ', $this->columns);
@@ -512,7 +512,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         }
 
         // Build GROUP BY clause.
-        if (isset($this->groupBy) && !empty($this->groupBy)) {
+        if ($this->groupBy) {
             $sql .= ' GROUP BY ' . implode(', ', $this->groupBy);
         }
 

@@ -14,7 +14,7 @@ namespace Derafu\Query\Operator;
 
 use Derafu\Query\Operator\Contract\OperatorInterface;
 use Derafu\Query\Operator\Contract\OperatorManagerInterface;
-use InvalidArgumentException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Manages the lifecycle of query operators.
@@ -54,7 +54,7 @@ final class OperatorManager implements OperatorManagerInterface
         // Check for duplicate registration.
         if (isset($this->operators[$symbol])) {
             throw new InvalidArgumentException(
-                sprintf('Operator already registered: %s.', $symbol)
+                ['Operator already registered: {symbol}.', 'symbol' => (string) $symbol]
             );
         }
 
@@ -62,11 +62,11 @@ final class OperatorManager implements OperatorManagerInterface
         $use = $operator->get('alias');
         if ($use !== null && !isset($this->operators[$use])) {
             throw new InvalidArgumentException(
-                sprintf(
-                    'Operator %s requires unregistered operator: %s.',
-                    $symbol,
-                    $use
-                )
+                [
+                    'Operator {symbol} requires unregistered operator: {required}.',
+                    'symbol' => (string) $symbol,
+                    'required' => (string) $use,
+                ]
             );
         }
 
@@ -83,7 +83,7 @@ final class OperatorManager implements OperatorManagerInterface
     {
         if (!isset($this->operators[$symbol])) {
             throw new InvalidArgumentException(
-                sprintf('Operator not found: %s', $symbol)
+                ['Operator not found: {symbol}', 'symbol' => (string) $symbol]
             );
         }
 

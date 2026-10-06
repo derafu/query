@@ -14,7 +14,7 @@ namespace Derafu\Query\Filter;
 
 use Derafu\Query\Filter\Contract\PathInterface;
 use Derafu\Query\Filter\Contract\PathParserInterface;
-use InvalidArgumentException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Parser for field lookup expressions.
@@ -122,10 +122,10 @@ final class PathParser implements PathParserInterface
 
         // Basic check (not sanitization).
         if (preg_match('/^[^a-zA-Z0-9_]|[^a-zA-Z0-9_)_]$/', $name)) {
-            throw new InvalidArgumentException(sprintf(
-                'Invalid characters found in segment name %s. Allowed at the beginning: letters, numbers, underscore. Allowed at the end: letters, numbers, underscore, closing parenthesis.',
-                $name
-            ));
+            throw new InvalidArgumentException([
+                'Invalid characters found in segment name {name}. Allowed at the beginning: letters, numbers, underscore. Allowed at the end: letters, numbers, underscore, closing parenthesis.',
+                'name' => $name,
+            ]);
         }
 
         return new Segment(
@@ -150,7 +150,7 @@ final class PathParser implements PathParserInterface
             // Check if it contains a colon.
             if (!str_contains($pair, ':')) {
                 throw new InvalidArgumentException(
-                    sprintf('Invalid option format: %s.', $pair)
+                    ['Invalid option format: {option}.', 'option' => $pair]
                 );
             }
 

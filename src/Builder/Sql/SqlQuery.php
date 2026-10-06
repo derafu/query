@@ -14,8 +14,8 @@ namespace Derafu\Query\Builder\Sql;
 
 use ArrayAccess;
 use Derafu\Query\Builder\Contract\QueryInterface;
-use InvalidArgumentException;
-use LogicException;
+use Derafu\Translation\Exception\Core\TranslatableLogicException as LogicException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * SQL query implementation.
@@ -60,10 +60,10 @@ final class SqlQuery implements QueryInterface, ArrayAccess
         return match ($offset) {
             'sql' => $this->sql,
             'parameters' => $this->parameters,
-            default => throw new InvalidArgumentException(sprintf(
-                'Key %s does not exists.',
-                $offset
-            ))
+            default => throw new InvalidArgumentException([
+                'Key {key} does not exists.',
+                'key' => (string) $offset,
+            ])
         };
     }
 

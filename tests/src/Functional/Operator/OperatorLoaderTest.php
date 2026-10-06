@@ -12,7 +12,6 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Functional\Operator;
 
-use Derafu\Query\Operator\Contract\OperatorInterface;
 use Derafu\Query\Operator\Contract\OperatorLoaderInterface;
 use Derafu\Query\Operator\Operator;
 use Derafu\Query\Operator\OperatorLoader;
@@ -64,12 +63,7 @@ final class OperatorLoaderTest extends TestCase
             $this->fixturesPath . '/operators-valid.yaml'
         );
 
-        $this->assertIsArray($configs);
         $this->assertNotEmpty($configs);
-        $this->assertContainsOnlyInstancesOf(
-            OperatorInterface::class,
-            $configs
-        );
 
         // Test a standard operator (=).
         $equalsOp = $configs['='];

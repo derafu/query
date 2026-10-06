@@ -15,7 +15,7 @@ namespace Derafu\Query\Filter;
 use Derafu\Query\Filter\Contract\FilterInterface;
 use Derafu\Query\Filter\Contract\FilterParserInterface;
 use Derafu\Query\Operator\Contract\OperatorManagerInterface;
-use InvalidArgumentException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Parses operator expressions to extract operator and value components.
@@ -59,7 +59,7 @@ final class FilterParser implements FilterParserInterface
         }
 
         throw new InvalidArgumentException(
-            sprintf('No valid operator found in expression: %s', $expression)
+            ['No valid operator found in expression: {expression}', 'expression' => $expression]
         );
     }
 }

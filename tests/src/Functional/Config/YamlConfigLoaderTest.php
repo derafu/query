@@ -39,7 +39,6 @@ YAML;
 
         $config = $this->loader->loadFromString($yaml);
 
-        $this->assertIsArray($config);
         $this->assertSame('customers', $config['table']);
         $this->assertSame('*', $config['select']);
         $this->assertSame('status?=active', $config['where']);
@@ -65,7 +64,6 @@ YAML;
         try {
             $config = $this->loader->loadFromFile($file);
 
-            $this->assertIsArray($config);
             $this->assertSame('invoices', $config['table']);
             $this->assertSame('id, number', $config['select']);
             $this->assertSame('status?=paid', $config['where']);

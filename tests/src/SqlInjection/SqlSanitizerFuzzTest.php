@@ -13,18 +13,43 @@ declare(strict_types=1);
 namespace Derafu\TestsQuery\SqlInjection;
 
 use Derafu\Query\Builder\Sql\SqlSanitizerTrait;
-use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\TestCase;
+use Random\Engine\Mt19937;
+use Random\Randomizer;
 
-#[CoversClass(SqlSanitizerTrait::class)]
+/**
+ * Fuzzing of the SQL sanitizer.
+ *
+ * The inputs are random but reproducible: they come from a generator with a
+ * seed, which is fixed by default so every run is the same. To explore with
+ * other inputs set `FUZZ_SEED` to a number, or to `random` for a new seed. The
+ * seed is in the message of every assertion, so a failure can be repeated with
+ * `FUZZ_SEED=<seed>`.
+ */
+#[CoversTrait(SqlSanitizerTrait::class)]
 class SqlSanitizerFuzzTest extends TestCase
 {
+    private const FUZZ_ITERATIONS = 1000;
+
+    private const DEFAULT_SEED = 19860102;
+
     private $sanitizer;
 
-    private const FUZZ_ITERATIONS = 1000;
+    private int $seed;
+
+    private Randomizer $randomizer;
 
     protected function setUp(): void
     {
+        $seed = getenv('FUZZ_SEED');
+        $this->seed = match (true) {
+            $seed === 'random' => random_int(1, PHP_INT_MAX),
+            $seed !== false && ctype_digit($seed) => (int) $seed,
+            default => self::DEFAULT_SEED,
+        };
+        $this->randomizer = new Randomizer(new Mt19937($this->seed));
+
         $this->sanitizer = new class () {
             use SqlSanitizerTrait;
 
@@ -47,7 +72,7 @@ class SqlSanitizerFuzzTest extends TestCase
             $output = $this->sanitizer->sanitizeSimple($input);
 
             // Simple identifiers should only contain alphanumeric and underscore.
-            $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]*$/', $output);
+            $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]*$/', $output, $this->context($input));
         }
     }
 
@@ -55,7 +80,7 @@ class SqlSanitizerFuzzTest extends TestCase
     {
         for ($i = 0; $i < self::FUZZ_ITERATIONS; $i++) {
             $parts = [];
-            $numParts = random_int(2, 4);
+            $numParts = $this->randomizer->getInt(2, 4);
 
             for ($j = 0; $j < $numParts; $j++) {
                 $parts[] = $this->generateRandomString();
@@ -65,7 +90,7 @@ class SqlSanitizerFuzzTest extends TestCase
             $output = $this->sanitizer->sanitizeSimple($input);
 
             // Qualified identifiers should be dot-separated alphanumeric identifiers.
-            $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)*$/', $output);
+            $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)*$/', $output, $this->context($input));
         }
     }
 
@@ -74,21 +99,21 @@ class SqlSanitizerFuzzTest extends TestCase
         $functions = ['COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'COALESCE', 'LENGTH'];
 
         for ($i = 0; $i < self::FUZZ_ITERATIONS; $i++) {
-            $function = $functions[array_rand($functions)];
-            $numArgs = random_int(1, 3);
+            $function = $functions[$this->randomizer->getInt(0, count($functions) - 1)];
+            $numArgs = $this->randomizer->getInt(1, 3);
             $args = [];
 
             for ($j = 0; $j < $numArgs; $j++) {
                 // Mix of identifiers and literal values.
-                if (random_int(0, 1)) {
+                if ($this->randomizer->getInt(0, 1)) {
                     $args[] = $this->generateRandomString();
                 } else {
-                    $args[] = random_int(1, 1000);
+                    $args[] = $this->randomizer->getInt(1, 1000);
                 }
             }
 
             // Sometimes use * as an argument.
-            if (random_int(0, 10) > 8) {
+            if ($this->randomizer->getInt(0, 10) > 8) {
                 $args = ['*'];
             }
 
@@ -96,11 +121,11 @@ class SqlSanitizerFuzzTest extends TestCase
             $output = $this->sanitizer->sanitize($input);
 
             // Make sure function name is preserved and sanitized.
-            $this->assertStringContainsString(preg_replace('/[^a-zA-Z0-9_]/', '', $function), $output);
+            $this->assertStringContainsString(preg_replace('/[^a-zA-Z0-9_]/', '', $function), $output, $this->context($input));
 
             // If using *, make sure it's preserved.
             if ($args === ['*']) {
-                $this->assertStringContainsString('(*)', $output);
+                $this->assertStringContainsString('(*)', $output, $this->context($input));
             }
         }
     }
@@ -140,13 +165,21 @@ class SqlSanitizerFuzzTest extends TestCase
         }
     }
 
+    /**
+     * Message for the assertions: with the seed, a failure can be repeated.
+     */
+    private function context(string $input): string
+    {
+        return sprintf('FUZZ_SEED=%d, input: %s', $this->seed, $input);
+    }
+
     private function generateRandomString(int $length = 10): string
     {
         $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_. ;:\'"`~!@#$%^&*()+=[]{}\\|<>,/?';
         $randomString = '';
 
         for ($i = 0; $i < $length; $i++) {
-            $randomString .= $characters[random_int(0, strlen($characters) - 1)];
+            $randomString .= $characters[$this->randomizer->getInt(0, strlen($characters) - 1)];
         }
 
         return $randomString;

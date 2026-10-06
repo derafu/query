@@ -3,7 +3,8 @@
     backupGlobals="true"
     cacheDirectory="var/cache/phpunit"
     processIsolation="false"
-    executionOrder="depends,defects"
+    executionOrder="defects"
+    resolveDependencies="true"
     colors="true"
     testdox="true"
     requireCoverageMetadata="true"
@@ -36,6 +37,9 @@
         </testsuite>
         <testsuite name="sql_injection">
             <directory>tests/src/SqlInjection</directory>
+        </testsuite>
+        <testsuite name="translation">
+            <directory>tests/src/Translation</directory>
         </testsuite>
     </testsuites>
     <coverage

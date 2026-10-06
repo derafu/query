@@ -128,7 +128,6 @@ class PdoSqliteIntegrationTest extends TestCase
             ['id' => 1]
         );
 
-        $this->assertNotNull($customer);
         $this->assertArrayHasKey('id', $customer);
         $this->assertSame(1, $customer['id']);
     }

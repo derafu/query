@@ -14,7 +14,7 @@ namespace Derafu\Query\Filter;
 
 use Derafu\Query\Filter\Contract\FilterInterface;
 use Derafu\Query\Operator\Contract\OperatorInterface;
-use InvalidArgumentException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
  * Represents a parsed filter expression.
@@ -72,11 +72,11 @@ final class Filter implements FilterInterface
         $valid = (bool)preg_match($pattern, (string)$this->value);
 
         if (!$valid) {
-            throw new InvalidArgumentException(sprintf(
-                'Value "%s" is not valid for operator "%s".',
-                $this->value,
-                $this->operator->getSymbol()
-            ));
+            throw new InvalidArgumentException([
+                'Value "{value}" is not valid for operator "{operator}".',
+                'value' => (string) $this->value,
+                'operator' => $this->operator->getSymbol(),
+            ]);
         }
     }
 }

@@ -14,6 +14,7 @@ namespace Derafu\Query\Engine;
 
 use Derafu\Query\Engine\Abstract\AbstractSqlEngine;
 use Derafu\Query\Engine\Contract\SqlEngineInterface;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use Doctrine\DBAL\Connection as DoctrineConnection;
 use Doctrine\DBAL\Platforms\MySQLPlatform;
 use Doctrine\DBAL\Platforms\OraclePlatform;
@@ -21,7 +22,6 @@ use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Platforms\SQLServerPlatform;
 use PDO;
-use RuntimeException;
 
 /**
  * Doctrine implementation of the SQL execution engine.
