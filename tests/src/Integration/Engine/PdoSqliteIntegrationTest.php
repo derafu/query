@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Integration\Engine;
 
+use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Contract\QueryBuilderInterface;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
 use Derafu\Query\Builder\Sql\SqlQuery;
@@ -33,8 +34,10 @@ use Derafu\Query\Operator\OperatorManager;
 use PDO;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 
+#[UsesClass(AliasScope::class)]
 #[CoversClass(QueryConfig::class)]
 #[CoversClass(SqlQueryBuilder::class)]
 #[CoversClass(SqlBuilderWhere::class)]
@@ -62,8 +65,10 @@ class PdoSqliteIntegrationTest extends TestCase
         // Create in-memory SQLite database and load schema and test data.
         $this->engine = new PdoEngine(new PDO('sqlite::memory:'));
         $schema = file_get_contents(__DIR__ . '/../../../fixtures/integration/billing_schema.sql');
+        $this->assertIsString($schema);
         $this->engine->executeSqlDump($schema);
         $data = file_get_contents(__DIR__ . '/../../../fixtures/integration/billing_data.sql');
+        $this->assertIsString($data);
         $this->engine->executeSqlDump($data);
 
         // Create query builder.
@@ -76,6 +81,19 @@ class PdoSqliteIntegrationTest extends TestCase
         $this->query = new SqlQueryBuilder($this->engine, $expressionParser);
     }
 
+    public function testReportsTheNativeSqliteDriver(): void
+    {
+        $this->assertSame('sqlite', $this->engine->getDriver());
+        $connection = $this->engine->getConnection();
+        $this->assertInstanceOf(PDO::class, $connection);
+        $this->assertSame('sqlite', $connection->getAttribute(PDO::ATTR_DRIVER_NAME));
+        $this->assertSame([['value' => 1]], $this->engine->execute('SELECT 1 AS value'));
+    }
+
+    /**
+     * @param array{sql:string,parameters:array<string,mixed>} $sql
+     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:string|list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $query
+     */
     #[DataProvider('queryProvider')]
     public function testSqlQueries(
         string $description,
@@ -94,6 +112,9 @@ class PdoSqliteIntegrationTest extends TestCase
         $this->assertSame($expected, $actual, $description);
     }
 
+    /**
+     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:string|list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int}}>
+     */
     public static function queryProvider(): array
     {
         $cases = require __DIR__ . '/../../../fixtures/integration/queries_integration.php';
@@ -110,7 +131,7 @@ class PdoSqliteIntegrationTest extends TestCase
         return $data;
     }
 
-    public function testGetTable()
+    public function testGetTable(): void
     {
         $customers = $this->engine->getTable(
             'SELECT * FROM customers'
@@ -121,7 +142,7 @@ class PdoSqliteIntegrationTest extends TestCase
         $this->assertArrayHasKey('name', $customers[0]);
     }
 
-    public function testGetRow()
+    public function testGetRow(): void
     {
         $customer = $this->engine->getRow(
             'SELECT * FROM customers WHERE id = :id',
@@ -132,7 +153,7 @@ class PdoSqliteIntegrationTest extends TestCase
         $this->assertSame(1, $customer['id']);
     }
 
-    public function testGetCol()
+    public function testGetCol(): void
     {
         $names = $this->engine->getCol('SELECT name FROM customers');
 
@@ -140,7 +161,7 @@ class PdoSqliteIntegrationTest extends TestCase
         $this->assertContains('Acme Corp', $names);
     }
 
-    public function testGetValue()
+    public function testGetValue(): void
     {
         $name = $this->engine->getValue(
             'SELECT name FROM customers WHERE id = :id',

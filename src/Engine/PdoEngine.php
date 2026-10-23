@@ -14,6 +14,7 @@ namespace Derafu\Query\Engine;
 
 use Derafu\Query\Engine\Abstract\AbstractSqlEngine;
 use Derafu\Query\Engine\Contract\SqlEngineInterface;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use PDO;
 
 /**
@@ -66,7 +67,15 @@ final class PdoEngine extends AbstractSqlEngine implements SqlEngineInterface
      */
     public function getDriver(): string
     {
-        return $this->connection->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $driver = $this->connection->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if (!is_string($driver)) {
+            throw new RuntimeException([
+                'PDO returned an unexpected driver name type: {type}.',
+                'type' => get_debug_type($driver),
+            ]);
+        }
+
+        return $driver;
     }
 
     /**

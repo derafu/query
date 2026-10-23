@@ -26,6 +26,7 @@ use Derafu\Query\Filter\Segment;
 use Derafu\Query\Operator\Operator;
 use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -61,6 +62,15 @@ final class CompositeExpressionParserTest extends TestCase
         $this->parser = new CompositeExpressionParser($expressionParser);
     }
 
+    public function testUnclosedOuterGroupIsRejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->parser->parse('((id?=1)');
+    }
+
+    /**
+     * @return array<string,array{string,string,int|null,list<array{type:string,count?:int}>|null}>
+     */
     public static function structureProvider(): array
     {
         return [
@@ -141,6 +151,9 @@ final class CompositeExpressionParserTest extends TestCase
         ];
     }
 
+    /**
+     * @param list<array{type:string,count?:int}>|null $childSpecs
+     */
     #[DataProvider('structureProvider')]
     public function testParsedStructure(
         string $expression,

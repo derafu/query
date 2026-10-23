@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\Query\Builder\Sql;
 
 use Closure;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 
 /**
  * Provides methods to sanitize SQL identifiers and expressions.
@@ -112,7 +113,7 @@ trait SqlSanitizerTrait
             }
 
             // Handle multiple arguments.
-            $args = array_map('trim', explode(',', $arguments));
+            $args = array_map('trim', $this->splitFunctionArguments($arguments));
             $sanitizedArgs = [];
 
             foreach ($args as $arg) {
@@ -158,6 +159,65 @@ trait SqlSanitizerTrait
     }
 
     /**
+     * Splits function arguments respecting nested parentheses and quotes.
+     *
+     * @param string $argsString The function arguments as a string.
+     * @return array<string> The separated arguments.
+     */
+    private function splitFunctionArguments(string $argsString): array
+    {
+        if ($argsString === '') {
+            return [];
+        }
+
+        $args = [];
+        $current = '';
+        $parenCount = 0;
+        $inQuote = false;
+        $quoteChar = '';
+
+        for ($i = 0; $i < strlen($argsString); $i++) {
+            $char = $argsString[$i];
+
+            // Handle quotes.
+            if (($char === "'" || $char === '"') && ($i === 0 || $argsString[$i - 1] !== '\\')) {
+                if (!$inQuote) {
+                    $inQuote = true;
+                    $quoteChar = $char;
+                } elseif ($char === $quoteChar) {
+                    $inQuote = false;
+                }
+            }
+
+            // Handle parentheses.
+            if (!$inQuote) {
+                if ($char === '(') {
+                    $parenCount++;
+                } elseif ($char === ')') {
+                    $parenCount--;
+                }
+            }
+
+            // If we find a comma outside of quotes and parentheses, separate
+            // the argument.
+            if ($char === ',' && !$inQuote && $parenCount === 0) {
+                $args[] = $current;
+                $current = '';
+                continue;
+            }
+
+            $current .= $char;
+        }
+
+        // Add the last argument.
+        if ($current !== '') {
+            $args[] = $current;
+        }
+
+        return $args;
+    }
+
+    /**
      * Sanitizes a simple identifier (column or table name).
      *
      * @param string $identifier The simple identifier to sanitize.
@@ -167,6 +227,12 @@ trait SqlSanitizerTrait
     {
         // Basic sanitization of simple identifiers.
         $identifier = preg_replace('/[^a-zA-Z0-9_]/', '', $identifier);
+        if ($identifier === null) {
+            throw new RuntimeException([
+                'Failed to sanitize SQL identifier: {error}',
+                'error' => preg_last_error_msg(),
+            ]);
+        }
 
         if ($this->sanitizeSqlIdentifierCallback !== null) {
             return ($this->sanitizeSqlIdentifierCallback)($identifier);

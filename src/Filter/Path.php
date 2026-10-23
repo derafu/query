@@ -22,18 +22,24 @@ use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as I
 final class Path implements PathInterface
 {
     /**
+     * @var non-empty-array<int,SegmentInterface>
+     */
+    private readonly array $segments;
+
+    /**
      * Creates a new path instance.
      *
      * @param array<int,SegmentInterface> $segments The path segments.
      */
     public function __construct(
-        private readonly array $segments
+        array $segments
     ) {
         if (empty($segments)) {
             throw new InvalidArgumentException(
                 'Path must have at least one segment.'
             );
         }
+        $this->segments = $segments;
     }
 
     /**
@@ -57,10 +63,7 @@ final class Path implements PathInterface
      */
     public function getLastSegment(): SegmentInterface
     {
-        $segments = $this->segments;
-        $lastSegment = end($segments);
-
-        return $lastSegment;
+        return $this->segments[array_key_last($this->segments)];
     }
 
     /**
@@ -70,10 +73,6 @@ final class Path implements PathInterface
      */
     public function __toString(): string
     {
-        if (empty($this->segments)) {
-            return '';
-        }
-
         $parts = [];
 
         foreach ($this->segments as $segment) {

@@ -16,11 +16,14 @@ use ArrayAccess;
 use Derafu\Query\Builder\Contract\QueryInterface;
 use Derafu\Translation\Exception\Core\TranslatableLogicException as LogicException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Stringable;
 
 /**
  * SQL query implementation.
  *
  * This class holds the generated SQL query and its parameters.
+ *
+ * @implements ArrayAccess<mixed,string|array<string,mixed>>
  */
 final class SqlQuery implements QueryInterface, ArrayAccess
 {
@@ -55,6 +58,9 @@ final class SqlQuery implements QueryInterface, ArrayAccess
         return in_array($offset, ['sql', 'parameters']);
     }
 
+    /**
+     * @return ($offset is 'sql' ? string : array<string,mixed>)
+     */
     public function offsetGet(mixed $offset): mixed
     {
         return match ($offset) {
@@ -62,7 +68,9 @@ final class SqlQuery implements QueryInterface, ArrayAccess
             'parameters' => $this->parameters,
             default => throw new InvalidArgumentException([
                 'Key {key} does not exists.',
-                'key' => (string) $offset,
+                'key' => is_scalar($offset) || $offset === null || is_resource($offset) || $offset instanceof Stringable
+                    ? (string) $offset
+                    : get_debug_type($offset),
             ])
         };
     }

@@ -29,7 +29,7 @@ interface SegmentInterface extends Stringable
     /**
      * Gets the segment options if specified.
      *
-     * @return array<string,string|array<string,string>>
+     * @return array<array-key,string|array<array-key,string>|null>
      */
     public function getOptions(): array;
 

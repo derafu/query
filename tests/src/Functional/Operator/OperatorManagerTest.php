@@ -191,7 +191,7 @@ final class OperatorManagerTest extends TestCase
      * Creates a mock operator config for testing.
      *
      * @param string $symbol The operator symbol.
-     * @param array $config The operator configuration.
+     * @param array<string,mixed> $config The operator configuration.
      * @return OperatorInterface The mock config.
      */
     private function createOperatorConfig(

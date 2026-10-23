@@ -15,11 +15,15 @@ namespace Derafu\Query\Bridge;
 use Derafu\Query\Bridge\Contract\QueryBuilderConditionApplierInterface;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
+use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Platforms\MySQLPlatform;
 use Doctrine\DBAL\Platforms\OraclePlatform;
 use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Platforms\SQLServerPlatform;
+use Doctrine\DBAL\Query\From;
+use Doctrine\DBAL\Query\Join;
 use Doctrine\DBAL\Query\QueryBuilder as DoctrineDBALQueryBuilder;
 use ReflectionProperty;
 
@@ -85,8 +89,7 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
      */
     private function resolveDriver(DoctrineDBALQueryBuilder $qb): string
     {
-        self::$connectionProperty ??= new ReflectionProperty($qb, 'connection');
-        $platform = self::$connectionProperty->getValue($qb)->getDatabasePlatform();
+        $platform = $this->readConnection($qb)->getDatabasePlatform();
 
         return match (true) {
             $platform instanceof MySQLPlatform => 'mysql',
@@ -150,6 +153,86 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
 
     private static ?ReflectionProperty $joinProperty = null;
 
+    private function readConnection(DoctrineDBALQueryBuilder $qb): Connection
+    {
+        self::$connectionProperty ??= new ReflectionProperty($qb, 'connection');
+        $connection = self::$connectionProperty->getValue($qb);
+        if (!$connection instanceof Connection) {
+            throw new RuntimeException([
+                'Unexpected Doctrine DBAL QueryBuilder state for "{part}".',
+                'part' => 'connection',
+            ]);
+        }
+
+        return $connection;
+    }
+
+    /**
+     * @return list<From>
+     */
+    private function readFrom(DoctrineDBALQueryBuilder $qb): array
+    {
+        self::$fromProperty ??= new ReflectionProperty($qb, 'from');
+        $from = self::$fromProperty->getValue($qb);
+        if (!is_array($from)) {
+            throw new RuntimeException([
+                'Unexpected Doctrine DBAL QueryBuilder state for "{part}".',
+                'part' => 'from',
+            ]);
+        }
+
+        $validated = [];
+        foreach ($from as $entry) {
+            if (!$entry instanceof From) {
+                throw new RuntimeException([
+                    'Unexpected Doctrine DBAL QueryBuilder state for "{part}".',
+                    'part' => 'from',
+                ]);
+            }
+            $validated[] = $entry;
+        }
+
+        return $validated;
+    }
+
+    /**
+     * @return array<array-key,array<array-key,Join>>
+     */
+    private function readJoins(DoctrineDBALQueryBuilder $qb): array
+    {
+        self::$joinProperty ??= new ReflectionProperty($qb, 'join');
+        $joins = self::$joinProperty->getValue($qb);
+        if (!is_array($joins)) {
+            throw new RuntimeException([
+                'Unexpected Doctrine DBAL QueryBuilder state for "{part}".',
+                'part' => 'join',
+            ]);
+        }
+
+        $validated = [];
+        foreach ($joins as $alias => $group) {
+            if (!is_array($group)) {
+                throw new RuntimeException([
+                    'Unexpected Doctrine DBAL QueryBuilder state for "{part}".',
+                    'part' => 'join',
+                ]);
+            }
+            $validatedGroup = [];
+            foreach ($group as $key => $join) {
+                if (!$join instanceof Join) {
+                    throw new RuntimeException([
+                        'Unexpected Doctrine DBAL QueryBuilder state for "{part}".',
+                        'part' => 'join',
+                    ]);
+                }
+                $validatedGroup[$key] = $join;
+            }
+            $validated[$alias] = $validatedGroup;
+        }
+
+        return $validated;
+    }
+
     /**
      * Returns the lower-cased table name of the first FROM entry, or an empty
      * string when no FROM has been set yet. Used for path-segment matching.
@@ -159,8 +242,7 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
      */
     private function getFrom(DoctrineDBALQueryBuilder $qb): string
     {
-        self::$fromProperty ??= new ReflectionProperty($qb, 'from');
-        $from = self::$fromProperty->getValue($qb);
+        $from = $this->readFrom($qb);
 
         if (empty($from)) {
             return '';
@@ -176,8 +258,7 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
      */
     private function getFromAliasOrTable(DoctrineDBALQueryBuilder $qb): string
     {
-        self::$fromProperty ??= new ReflectionProperty($qb, 'from');
-        $from = self::$fromProperty->getValue($qb);
+        $from = $this->readFrom($qb);
 
         if (empty($from)) {
             return '';
@@ -194,8 +275,7 @@ final class DoctrineDBALQueryBuilderConditionApplier implements QueryBuilderCond
      */
     private function hasJoin(DoctrineDBALQueryBuilder $qb, string $alias): bool
     {
-        self::$joinProperty ??= new ReflectionProperty($qb, 'join');
-        $joins = self::$joinProperty->getValue($qb);
+        $joins = $this->readJoins($qb);
 
         foreach ($joins as $fromJoins) {
             foreach ($fromJoins as $join) {

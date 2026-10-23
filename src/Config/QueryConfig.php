@@ -14,6 +14,10 @@ namespace Derafu\Query\Config;
 
 use Derafu\Query\Builder\Contract\QueryBuilderInterface;
 use Derafu\Query\Config\Contract\QueryConfigInterface;
+use Derafu\Query\Filter\Contract\CompositeConditionInterface;
+use Derafu\Query\Filter\Contract\ConditionInterface;
+use Derafu\Support\ArrayReader;
+use Derafu\Support\ArrayType;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
@@ -30,6 +34,8 @@ class QueryConfig implements QueryConfigInterface
      */
     private array $config;
 
+    private readonly ArrayReader $reader;
+
     /**
      * Creates a new query configuration.
      *
@@ -38,6 +44,7 @@ class QueryConfig implements QueryConfigInterface
      */
     public function __construct(array $config)
     {
+        $this->reader = ArrayReader::from($config);
         $this->validateConfiguration($config);
         $this->config = $config;
     }
@@ -128,108 +135,86 @@ class QueryConfig implements QueryConfigInterface
      */
     public function applyTo(QueryBuilderInterface $builder): QueryBuilderInterface
     {
-        // Configure FROM clause (required).
-        if (isset($this->config['table'])) {
-            $builder = isset($this->config['alias'])
-                ? $builder->table($this->config['table'], $this->config['alias'])
-                : $builder->table($this->config['table']);
+        // The table is optional: it can also be inferred from condition paths.
+        if (($table = $this->reader->string('table')) !== null) {
+            $alias = $this->reader->string('alias');
+            $builder = $alias !== null
+                ? $builder->table($table, $alias)
+                : $builder->table($table);
         }
 
-        // Configure SELECT columns.
-        if (isset($this->config['select'])) {
-            $builder->select($this->config['select']);
+        if (($columns = $this->readColumns('select')) !== null) {
+            $builder->select($columns);
         }
 
-        // Configure DISTINCT.
-        if (isset($this->config['distinct']) && $this->config['distinct']) {
+        if ($this->reader->bool('distinct') === true) {
             $builder->distinct();
         }
 
-        // Configure WHERE conditions.
-        if (isset($this->config['where'])) {
-            $builder->where($this->config['where']);
+        if (($condition = $this->readCondition('where')) !== null) {
+            $builder->where($condition);
+        }
+        if (($condition = $this->readCondition('andWhere')) !== null) {
+            $builder->andWhere($condition);
+        }
+        if (($condition = $this->readCondition('orWhere')) !== null) {
+            $builder->orWhere($condition);
+        }
+        if (($condition = $this->readConditionGroup('andWhereOr')) !== null) {
+            $builder->andWhereOr($condition);
         }
 
-        // Configure additional WHERE conditions.
-        if (isset($this->config['andWhere'])) {
-            $builder->andWhere($this->config['andWhere']);
-        }
-
-        if (isset($this->config['orWhere'])) {
-            $builder->orWhere($this->config['orWhere']);
-        }
-
-        if (isset($this->config['andWhereOr'])) {
-            $builder->andWhereOr($this->config['andWhereOr']);
-        }
-
-        // Configure JOIN clauses.
-        if (isset($this->config['innerJoin'])) {
-            $join = $this->config['innerJoin'];
+        if (($join = $this->reader->reader('innerJoin')) !== null) {
             $builder->innerJoin(
-                $join['table'],
-                $join['condition'],
-                $join['alias'] ?? null
+                $join->require('table', ArrayType::string()),
+                $join->require('condition', ArrayType::string()),
+                $join->string('alias')
             );
         }
-
-        if (isset($this->config['leftJoin'])) {
-            $join = $this->config['leftJoin'];
+        if (($join = $this->reader->reader('leftJoin')) !== null) {
             $builder->leftJoin(
-                $join['table'],
-                $join['condition'],
-                $join['alias'] ?? null
+                $join->require('table', ArrayType::string()),
+                $join->require('condition', ArrayType::string()),
+                $join->string('alias')
             );
         }
-
-        if (isset($this->config['rightJoin'])) {
-            $join = $this->config['rightJoin'];
+        if (($join = $this->reader->reader('rightJoin')) !== null) {
             $builder->rightJoin(
-                $join['table'],
-                $join['condition'],
-                $join['alias'] ?? null
+                $join->require('table', ArrayType::string()),
+                $join->require('condition', ArrayType::string()),
+                $join->string('alias')
             );
         }
-
-        if (isset($this->config['crossJoin'])) {
-            $join = $this->config['crossJoin'];
+        if (($join = $this->reader->reader('crossJoin')) !== null) {
             $builder->crossJoin(
-                $join['table'],
-                $join['alias'] ?? null
+                $join->require('table', ArrayType::string()),
+                $join->string('alias')
             );
         }
 
-        // Configure GROUP BY.
-        if (isset($this->config['groupBy'])) {
-            $builder->groupBy($this->config['groupBy']);
+        if (($columns = $this->readColumns('groupBy')) !== null) {
+            $builder->groupBy($columns);
         }
-
-        // Configure HAVING.
-        if (isset($this->config['having'])) {
-            $builder->having($this->config['having']);
+        if (($condition = $this->readCondition('having')) !== null) {
+            $builder->having($condition);
         }
-
-        // Configure ORDER BY.
-        if (isset($this->config['orderBy'])) {
-            $builder->orderBy($this->config['orderBy']);
+        if (($columns = $this->readColumns('orderBy')) !== null) {
+            $builder->orderBy($columns);
         }
-
-        // Configure LIMIT and OFFSET.
-        if (isset($this->config['limit'])) {
-            $builder->limit($this->config['limit']);
+        if (($limit = $this->reader->int('limit')) !== null) {
+            $builder->limit($limit);
         }
-
-        if (isset($this->config['offset'])) {
-            $builder->offset($this->config['offset']);
+        if (($offset = $this->reader->int('offset')) !== null) {
+            $builder->offset($offset);
         }
 
         return $builder;
     }
 
     /**
-     * Validates that the configuration contains the minimum required elements.
+     * Validates known options before any query builder is changed.
      *
-     * For now, just validates emptiness.
+     * Unknown options are preserved. Absent and null options are not applied.
      *
      * @param array<string, mixed> $config The configuration to validate.
      * @throws InvalidArgumentException If the configuration is invalid.
@@ -241,5 +226,137 @@ class QueryConfig implements QueryConfigInterface
                 'Query configuration cannot be empty.'
             );
         }
+
+        $this->reader->string('table');
+        $this->reader->string('alias');
+        $this->reader->bool('distinct');
+        $this->reader->int('limit');
+        $this->reader->int('offset');
+
+        foreach (['select', 'groupBy', 'orderBy'] as $key) {
+            $this->readColumns($key);
+        }
+        foreach (['where', 'andWhere', 'orWhere', 'having'] as $key) {
+            $this->readCondition($key);
+        }
+        $this->readConditionGroup('andWhereOr');
+
+        foreach (['innerJoin', 'leftJoin', 'rightJoin', 'crossJoin'] as $key) {
+            $join = $this->reader->reader($key);
+            if ($join === null) {
+                continue;
+            }
+            $join->require('table', ArrayType::string());
+            if ($key !== 'crossJoin') {
+                $join->require('condition', ArrayType::string());
+            }
+            $join->string('alias');
+        }
+    }
+
+    /**
+     * @return string|array<string>|null
+     */
+    private function readColumns(string $key): string|array|null
+    {
+        return $this->reader->get(
+            $key,
+            new ArrayType('string|array<string>', self::parseColumns(...))
+        );
+    }
+
+    /**
+     * Accepts both lists and keyed arrays, preserving their keys and values.
+     *
+     * @return string|array<string>
+     */
+    private static function parseColumns(mixed $value, string $path): string|array
+    {
+        if (is_string($value)) {
+            return $value;
+        }
+        if (!is_array($value)) {
+            throw ArrayType::mismatch($path, 'string|array<string>', $value);
+        }
+
+        $columns = [];
+        foreach ($value as $key => $column) {
+            $columns[$key] = ArrayType::string()->parse(
+                $column,
+                ArrayType::path($path, $key)
+            );
+        }
+
+        return $columns;
+    }
+
+    /**
+     * @return string|array<mixed>|ConditionInterface|CompositeConditionInterface|null
+     */
+    private function readCondition(
+        string $key
+    ): string|array|ConditionInterface|CompositeConditionInterface|null {
+        return $this->reader->get(
+            $key,
+            new ArrayType(
+                'string|array|ConditionInterface|CompositeConditionInterface',
+                self::parseCondition(...)
+            )
+        );
+    }
+
+    /**
+     * Unlike the other condition options, andWhereOr takes a group or an object.
+     *
+     * @return array<mixed>|ConditionInterface|CompositeConditionInterface|null
+     */
+    private function readConditionGroup(
+        string $key
+    ): array|ConditionInterface|CompositeConditionInterface|null {
+        $condition = $this->readCondition($key);
+        if (is_string($condition)) {
+            throw ArrayType::mismatch(
+                $key,
+                'array|ConditionInterface|CompositeConditionInterface',
+                $condition
+            );
+        }
+
+        return $condition;
+    }
+
+    /**
+     * Checks nested expressions without changing their grouping or keys.
+     *
+     * @return string|array<mixed>|ConditionInterface|CompositeConditionInterface
+     */
+    private static function parseCondition(
+        mixed $value,
+        string $path
+    ): string|array|ConditionInterface|CompositeConditionInterface {
+        if (
+            is_string($value)
+            || $value instanceof ConditionInterface
+            || $value instanceof CompositeConditionInterface
+        ) {
+            return $value;
+        }
+        if (!is_array($value)) {
+            throw ArrayType::mismatch(
+                $path,
+                'string|array|ConditionInterface|CompositeConditionInterface',
+                $value
+            );
+        }
+
+        $conditions = [];
+        foreach ($value as $key => $condition) {
+            $conditions[$key] = self::parseCondition(
+                $condition,
+                ArrayType::path($path, $key)
+            );
+        }
+
+        return $conditions;
     }
 }

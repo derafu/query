@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsQuery\Integration\Bridge;
 
 use Derafu\Query\Bridge\DoctrineDBALQueryBuilderConditionApplier;
+use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
 use Derafu\Query\Builder\Sql\SqlQuery;
 use Derafu\Query\Filter\CompositeCondition;
@@ -37,6 +38,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 
+#[UsesClass(AliasScope::class)]
 #[CoversClass(DoctrineDBALQueryBuilderConditionApplier::class)]
 #[UsesClass(SqlBuilderWhere::class)]
 #[UsesClass(SqlQuery::class)]
@@ -68,12 +70,16 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
 
         $pdo = $this->connection->getNativeConnection();
         assert($pdo instanceof PDO);
-        $pdo->exec(file_get_contents(
+        $sql = file_get_contents(
             __DIR__ . '/../../../fixtures/integration/billing_schema.sql'
-        ));
-        $pdo->exec(file_get_contents(
+        );
+        $this->assertIsString($sql);
+        $pdo->exec($sql);
+        $sql = file_get_contents(
             __DIR__ . '/../../../fixtures/integration/billing_data.sql'
-        ));
+        );
+        $this->assertIsString($sql);
+        $pdo->exec($sql);
 
         $pathParser = new PathParser();
         $loader = new OperatorLoader();
@@ -87,6 +93,51 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
         $this->applier = new DoctrineDBALQueryBuilderConditionApplier();
     }
 
+    public function testWhereCanBeAppliedBeforeTheConsumerSetsFrom(): void
+    {
+        $qb = $this->connection->createQueryBuilder()->select('id');
+        $this->applier->apply($qb, $this->expressionParser->parse('status?=active'));
+        $qb->from('customers')->orderBy('id');
+
+        $this->assertSame([['id' => 1], ['id' => 2], ['id' => 4]], $qb->fetchAllAssociative());
+    }
+
+    public function testAnExistingIntermediateJoinCanBeExtendedWithoutAnAlias(): void
+    {
+        $qb = $this->connection->createQueryBuilder()
+            ->select('c.id')
+            ->from('customers', 'c')
+            ->innerJoin('c', 'invoices', 'i', 'c.id = i.customer_id')
+            ->orderBy('c.id');
+        $condition = $this->expressionParser->parse(
+            'customers[alias:c]__invoices[alias:i]__payments[on:id=invoice_id]__status?=pending'
+        );
+        $this->applier->apply($qb, $condition);
+
+        $this->assertSame(1, substr_count($qb->getSQL(), 'JOIN invoices'));
+        $this->assertSame(1, substr_count($qb->getSQL(), 'JOIN payments'));
+        $this->assertSame([['id' => 2], ['id' => 4]], $qb->fetchAllAssociative());
+    }
+
+    public function testPreconfiguredJoinIsReusedWithoutChangingItsAlias(): void
+    {
+        $qb = $this->connection->createQueryBuilder()
+            ->select('c.id')
+            ->from('customers', 'c')
+            ->innerJoin('c', 'invoices', 'I', 'c.id = I.customer_id')
+            ->orderBy('c.id');
+        $condition = $this->expressionParser->parse('customers[alias:c]__invoices[alias:i,on:id=customer_id]__status?=paid');
+        $this->applier->apply($qb, $condition);
+        $this->applier->apply($qb, $condition);
+
+        $this->assertSame(1, substr_count($qb->getSQL(), 'JOIN invoices I'));
+        $this->assertSame([['id' => 1], ['id' => 2]], $qb->fetchAllAssociative());
+    }
+
+    /**
+     * @param array{sql:string,parameters:array<string,mixed>} $sql
+     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $query
+     */
     #[DataProvider('queryProvider')]
     public function testSqlQueries(
         string $description,
@@ -101,6 +152,9 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
         $this->assertSame($expected, $actual, $description);
     }
 
+    /**
+     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int}}>
+     */
     public static function queryProvider(): array
     {
         $cases = require __DIR__ . '/../../../fixtures/integration/queries_integration.php';
@@ -119,6 +173,8 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
 
     /**
      * Builds a Doctrine DBAL QueryBuilder from a query config array.
+     *
+     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $config
      */
     private function buildQueryFromConfig(array $config): DoctrineDBALQueryBuilder
     {
@@ -148,7 +204,8 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
                 continue;
             }
             $join = $config[$joinType];
-            $fromAlias = $config['alias'] ?? $config['table'];
+            $fromAlias = $config['alias'] ?? $config['table'] ?? null;
+            $this->assertIsString($fromAlias);
             $joinAlias = $join['alias'] ?? $join['table'];
             match ($joinType) {
                 'innerJoin' => $qb->innerJoin($fromAlias, $join['table'], $joinAlias, $join['condition']),
@@ -199,6 +256,8 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
     /**
      * Builds a CompositeCondition from the where/andWhere/orWhere/andWhereOr
      * config keys, following the same composition logic as SqlQueryBuilder.
+     *
+     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $config
      */
     private function buildWhereComposite(array $config): ?CompositeConditionInterface
     {
@@ -250,6 +309,8 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
 
     /**
      * Adds one or more expression strings (or arrays of them) to a composite.
+     *
+     * @param string|list<string|list<string>> $conditions
      */
     private function addToComposite(
         CompositeConditionInterface $composite,
@@ -274,6 +335,8 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
     /**
      * Adds orWhere value to an OR composite, handling flat arrays and
      * arrays-of-arrays (multiple OR groups).
+     *
+     * @param string|list<string|list<string>> $conditions
      */
     private function addOrGroupToComposite(
         CompositeConditionInterface $orComposite,
@@ -305,6 +368,32 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
             $and = CompositeCondition::and();
             $this->addToComposite($and, $conditions);
             $orComposite->add($and);
+        }
+    }
+
+    /** @return iterable<string, array{'pdo_oci'|'pdo_sqlsrv'}> */
+    public static function compilationDrivers(): iterable
+    {
+        yield 'oracle' => ['pdo_oci'];
+        yield 'sql server' => ['pdo_sqlsrv'];
+    }
+
+    /** @param 'pdo_oci'|'pdo_sqlsrv' $driver */
+    #[DataProvider('compilationDrivers')]
+    public function testConditionsAndPaginationCompileWithoutConnectingToTheServer(string $driver): void
+    {
+        $connection = DriverManager::getConnection(['driver' => $driver]);
+        try {
+            $qb = $connection->createQueryBuilder()->select('c.id')->from('customers', 'c')
+                ->orderBy('c.id')->setFirstResult(2)->setMaxResults(5);
+            $this->applier->apply($qb, $this->expressionParser->parse('status?=active'));
+
+            $this->assertStringContainsString('WHERE status = :', $qb->getSQL());
+            $this->assertStringEndsWith('OFFSET 2 ROWS FETCH NEXT 5 ROWS ONLY', $qb->getSQL());
+            $this->assertSame(['active'], array_values($qb->getParameters()));
+            $this->assertFalse($connection->isConnected());
+        } finally {
+            $connection->close();
         }
     }
 }

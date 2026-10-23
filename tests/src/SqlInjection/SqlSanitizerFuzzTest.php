@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsQuery\SqlInjection;
 
 use Derafu\Query\Builder\Sql\SqlSanitizerTrait;
+use Derafu\TestsQuery\Fixture\SqlSanitizer;
 use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\TestCase;
 use Random\Engine\Mt19937;
@@ -27,6 +28,8 @@ use Random\Randomizer;
  * seed is in the message of every assertion, so a failure can be repeated with
  * `FUZZ_SEED=<seed>`.
  */
+require_once __DIR__ . '/../../fixtures/SqlSanitizer.php';
+
 #[CoversTrait(SqlSanitizerTrait::class)]
 class SqlSanitizerFuzzTest extends TestCase
 {
@@ -34,7 +37,7 @@ class SqlSanitizerFuzzTest extends TestCase
 
     private const DEFAULT_SEED = 19860102;
 
-    private $sanitizer;
+    private SqlSanitizer $sanitizer;
 
     private int $seed;
 
@@ -50,19 +53,7 @@ class SqlSanitizerFuzzTest extends TestCase
         };
         $this->randomizer = new Randomizer(new Mt19937($this->seed));
 
-        $this->sanitizer = new class () {
-            use SqlSanitizerTrait;
-
-            public function sanitize(string $expression): string
-            {
-                return $this->sanitizeSqlIdentifier($expression);
-            }
-
-            public function sanitizeSimple(string $expression): string
-            {
-                return $this->sanitizeSqlSimpleIdentifier($expression);
-            }
-        };
+        $this->sanitizer = new SqlSanitizer();
     }
 
     public function testFuzzSimpleIdentifiers(): void
@@ -121,7 +112,9 @@ class SqlSanitizerFuzzTest extends TestCase
             $output = $this->sanitizer->sanitize($input);
 
             // Make sure function name is preserved and sanitized.
-            $this->assertStringContainsString(preg_replace('/[^a-zA-Z0-9_]/', '', $function), $output, $this->context($input));
+            $sanitizedFunction = preg_replace('/[^a-zA-Z0-9_]/', '', $function);
+            $this->assertIsString($sanitizedFunction);
+            $this->assertStringContainsString($sanitizedFunction, $output, $this->context($input));
 
             // If using *, make sure it's preserved.
             if ($args === ['*']) {

@@ -23,6 +23,8 @@ use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Contract\ExpressionParserInterface;
 use Derafu\Query\Filter\Contract\PathInterface;
+use Derafu\Query\Filter\SegmentOptionsTrait;
+use Derafu\Support\ArrayType;
 use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
@@ -35,6 +37,7 @@ use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as I
 final class SqlQueryBuilder implements QueryBuilderInterface
 {
     use SqlSanitizerTrait;
+    use SegmentOptionsTrait;
 
     /**
      * The columns to select.
@@ -202,6 +205,11 @@ final class SqlQueryBuilder implements QueryBuilderInterface
             return $this->where($condition);
         }
 
+        // Apply AND to the entire preceding OR group.
+        if ($this->where->getType() === 'OR') {
+            $this->where = CompositeCondition::and()->add($this->where);
+        }
+
         $this->addConditions($this->where, $condition);
 
         return $this;
@@ -248,7 +256,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
                     } else {
                         // Single condition becomes its own AND group.
                         $singleAnd = CompositeCondition::and();
-                        $this->addConditions($singleAnd, $item);
+                        $this->addConditions($singleAnd, self::validateCondition($item));
                         $this->where->add($singleAnd);
                     }
                 }
@@ -288,7 +296,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
                 if (!is_array($groupConditions)) {
                     // If not an array, treat as simple condition.
                     $and = CompositeCondition::and();
-                    $this->addConditions($and, $groupConditions);
+                    $this->addConditions($and, self::validateCondition($groupConditions));
                     $or->add($and);
                 } else {
                     // Create an AND group for this subarray.
@@ -300,6 +308,11 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         } else {
             // If not an array, add directly.
             $or->add($conditions);
+        }
+
+        // Preserve an existing OR group as a single operand of the new AND.
+        if ($this->where->getType() === 'OR') {
+            $this->where = CompositeCondition::and()->add($this->where);
         }
 
         // Add the OR composite to the main AND composite.
@@ -464,6 +477,8 @@ final class SqlQueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritDoc}
+     *
+     * @return SqlQuery
      */
     public function getQuery(): QueryInterface
     {
@@ -546,6 +561,8 @@ final class SqlQueryBuilder implements QueryBuilderInterface
 
     /**
      * {@inheritDoc}
+     *
+     * @return array<array<string,mixed>>
      */
     public function execute(): array
     {
@@ -565,7 +582,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
      *   - CompositeConditionInterface objects: Added directly to the composite.
      *
      * @param CompositeConditionInterface $composite The composite to add conditions to.
-     * @param string|array|ConditionInterface|CompositeConditionInterface $conditions
+     * @param string|array<mixed>|ConditionInterface|CompositeConditionInterface $conditions
      * The condition expression(s) to add.
      * @return void
      */
@@ -592,6 +609,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
 
         // Process array of expressions.
         foreach ($conditions as $condition) {
+            $condition = self::validateCondition($condition);
             if ($condition instanceof ConditionInterface ||
                 $condition instanceof CompositeConditionInterface) {
                 $composite->add($condition);
@@ -603,6 +621,31 @@ final class SqlQueryBuilder implements QueryBuilderInterface
                 }
             }
         }
+    }
+
+    /**
+     * Validates an array element before processing it as a condition or group.
+     * Nested arrays are checked as addConditions() traverses them.
+     *
+     * @return string|array<mixed>|ConditionInterface|CompositeConditionInterface
+     */
+    private static function validateCondition(
+        mixed $condition
+    ): string|array|ConditionInterface|CompositeConditionInterface {
+        if (
+            is_string($condition)
+            || is_array($condition)
+            || $condition instanceof ConditionInterface
+            || $condition instanceof CompositeConditionInterface
+        ) {
+            return $condition;
+        }
+
+        throw ArrayType::mismatch(
+            'condition',
+            'string|array|ConditionInterface|CompositeConditionInterface',
+            $condition
+        );
     }
 
     /**
@@ -628,7 +671,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
 
                 $this->from(
                     $firstSegment->getName(),
-                    $firstSegment->getOption('alias')
+                    $this->readSegmentOptions($firstSegment)->string('alias')
                 );
             }
         }
@@ -681,7 +724,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         // The first segment should be the base table.
         $baseSegment = $segments[0];
         $baseTable = $baseSegment->getName();
-        $baseAlias = $baseSegment->getOption('alias');
+        $baseAlias = $this->readSegmentOptions($baseSegment)->string('alias');
 
         // Check that it matches the current table.
         // If the base table of the path does not match the one in the query, it
@@ -698,13 +741,13 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         for ($i = 1; $i < count($segments) - 1; $i++) {
             $segment = $segments[$i];
             $targetTable = $segment->getName();
-            $targetAlias = $segment->getOption('alias');
+            $targetAlias = $this->readSegmentOptions($segment)->string('alias');
 
             // Determine join type.
-            $joinType = strtoupper($segment->getOption('join', 'INNER'));
+            $joinType = strtoupper($this->readSegmentOptions($segment)->string('join') ?? 'INNER');
 
             // Check join conditions.
-            $joinConditions = $segment->getOption('on');
+            $joinConditions = $this->readSegmentJoinConditions($segment);
             if ($joinConditions) {
                 $joinConditionParts = [];
 

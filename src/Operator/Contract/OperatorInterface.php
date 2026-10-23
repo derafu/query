@@ -81,10 +81,10 @@ interface OperatorInterface
      * Gets the value casting rules.
      *
      * Defines how raw string values should be converted before using in SQL.
-     * For example, ['type' => 'int'] would ensure numeric comparison, or
-     * ['list' => ','] would split string into array.
+     * For example, ['like'] adds wildcards and ['list'] splits the value using
+     * the SQL builder's list delimiter.
      *
-     * @return array<string,mixed> The casting configuration rules.
+     * @return array<array-key,string> The casting configuration rules.
      */
     public function getCastingRules(): array;
 

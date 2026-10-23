@@ -63,7 +63,7 @@ return [
             'filter' => '~*hello',
             'engine' => 'mysql',
             'expected' => [
-                'sql' => 'posts.title REGEXP :param_{id}',
+                'sql' => "REGEXP_LIKE(posts.title, :param_{id}, 'i')",
                 'parameters' => ['param_{id}' => 'hello'],
             ],
         ],
@@ -278,7 +278,7 @@ return [
             'filter' => '~^test',
             'engine' => 'mysql',
             'expected' => [
-                'sql' => 'description REGEXP BINARY :param_{id}',
+                'sql' => "REGEXP_LIKE(description, :param_{id}, 'c')",
                 'parameters' => ['param_{id}' => '^test'],
             ],
         ],

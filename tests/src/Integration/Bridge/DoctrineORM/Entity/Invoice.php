@@ -50,9 +50,11 @@ class Invoice
     #[ORM\JoinColumn(name: 'customer_id', referencedColumnName: 'id', nullable: true)]
     private ?Customer $customer = null;
 
+    /** @var Collection<int,InvoiceDetail> */
     #[ORM\OneToMany(targetEntity: InvoiceDetail::class, mappedBy: 'invoice')]
     private Collection $invoice_details;
 
+    /** @var Collection<int,Payment> */
     #[ORM\OneToMany(targetEntity: Payment::class, mappedBy: 'invoice')]
     private Collection $payments;
 

@@ -17,6 +17,7 @@ use Derafu\Query\Builder\Sql\SqlSanitizerTrait;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Contract\PathInterface;
+use Derafu\Query\Filter\SegmentOptionsTrait;
 
 /**
  * Shared logic for condition applier implementations.
@@ -28,12 +29,10 @@ use Derafu\Query\Filter\Contract\PathInterface;
 trait ConditionApplierTrait
 {
     use SqlSanitizerTrait;
+    use SegmentOptionsTrait;
 
     /**
-     * Cache de instancias SqlBuilderWhere por driver. SqlBuilderWhere es
-     * stateless (solo almacena engine y listDelimiter como readonly), por lo
-     * que la misma instancia puede reutilizarse indefinidamente para el mismo
-     * driver. En la práctica habrá como máximo una entrada por tipo de BD.
+     * Reuses immutable builders by driver and template language.
      *
      * @var array<string, SqlBuilderWhere>
      */
@@ -49,11 +48,13 @@ trait ConditionApplierTrait
     protected function buildConditionSql(
         string $driver,
         ConditionInterface|CompositeConditionInterface $condition,
-        string $parentAlias = ''
+        string $parentAlias = '',
+        bool $dql = false
     ): array {
-        $this->sqlBuilderCache[$driver] ??= new SqlBuilderWhere($driver);
+        $cacheKey = $driver . ($dql ? ':dql' : ':sql');
+        $this->sqlBuilderCache[$cacheKey] ??= new SqlBuilderWhere($driver, dql: $dql);
 
-        return $this->sqlBuilderCache[$driver]->build($condition, $parentAlias)->getQuery();
+        return $this->sqlBuilderCache[$cacheKey]->build($condition, $parentAlias)->getQuery();
     }
 
     /**
@@ -90,7 +91,7 @@ trait ConditionApplierTrait
             $segments = $path->getSegments();
             if (count($segments) > 1) {
                 $first = $segments[0];
-                $alias = $first->getOption('alias');
+                $alias = $this->readSegmentOptions($first)->string('alias');
                 return [
                     'table' => $this->sanitizeSqlSimpleIdentifier($first->getName()),
                     'alias' => $alias
@@ -131,13 +132,13 @@ trait ConditionApplierTrait
             }
 
             $baseSegment = $segments[0];
-            $previousAlias = $baseSegment->getOption('alias') ?? $baseSegment->getName();
+            $previousAlias = $this->readSegmentOptions($baseSegment)->string('alias') ?? $baseSegment->getName();
 
             for ($i = 1; $i < count($segments) - 1; $i++) {
                 $segment = $segments[$i];
                 $assoc = $segment->getName();
-                $alias = $segment->getOption('alias') ?? $assoc;
-                $joinType = strtolower($segment->getOption('join', 'inner'));
+                $alias = $this->readSegmentOptions($segment)->string('alias') ?? $assoc;
+                $joinType = strtolower($this->readSegmentOptions($segment)->string('join') ?? 'inner');
 
                 if (!isset($seen[$alias])) {
                     $seen[$alias] = true;
@@ -191,15 +192,15 @@ trait ConditionApplierTrait
                 continue;
             }
 
-            $previousAlias = $baseSegment->getOption('alias') ?? $baseSegment->getName();
+            $previousAlias = $this->readSegmentOptions($baseSegment)->string('alias') ?? $baseSegment->getName();
 
             for ($i = 1; $i < count($segments) - 1; $i++) {
                 $segment = $segments[$i];
                 $targetTable = $this->sanitizeSqlSimpleIdentifier($segment->getName());
-                $targetAlias = $segment->getOption('alias');
-                $joinType = strtolower($segment->getOption('join', 'inner'));
+                $targetAlias = $this->readSegmentOptions($segment)->string('alias');
+                $joinType = strtolower($this->readSegmentOptions($segment)->string('join') ?? 'inner');
 
-                $joinConditions = $segment->getOption('on');
+                $joinConditions = $this->readSegmentJoinConditions($segment);
                 if (!$joinConditions) {
                     $previousAlias = $targetAlias ?? $targetTable;
                     continue;

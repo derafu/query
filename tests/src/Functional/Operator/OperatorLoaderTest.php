@@ -75,8 +75,10 @@ final class OperatorLoaderTest extends TestCase
         $regexOp = $configs['~'];
         $this->assertSame('~', $regexOp->getSymbol());
         $this->assertSame('regexp', $regexOp->getType());
-        $this->assertArrayHasKey('pgsql', $regexOp->get('sql'));
-        $this->assertArrayHasKey('mysql', $regexOp->get('sql'));
+        $sql = $regexOp->get('sql');
+        $this->assertIsArray($sql);
+        $this->assertArrayHasKey('pgsql', $sql);
+        $this->assertArrayHasKey('mysql', $sql);
     }
 
     /**

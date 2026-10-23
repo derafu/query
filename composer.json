@@ -27,17 +27,18 @@
     "require": {
         "php": "^8.5",
         "symfony/yaml": "^8.0",
-        "derafu/translation": "dev-main"
+        "derafu/translation": "dev-main",
+        "derafu/support": "dev-main"
     },
     "require-dev": {
         "ext-xdebug": "*",
         "friendsofphp/php-cs-fixer": "^3.95",
-        "phpstan/phpstan": "^2.2",
+        "phpstan/phpstan": "^2.3",
         "phpunit/phpunit": "^13.4",
-        "doctrine/dbal": "^4.4",
-        "doctrine/orm": "^3.6",
-        "illuminate/database": "^13.7",
-        "api-platform/core": "^4.3",
+        "doctrine/dbal": "^4.5",
+        "doctrine/orm": "^3.7",
+        "illuminate/database": "^13.34",
+        "api-platform/core": "^4.4",
         "nikic/php-parser": "^5.9",
         "phpstan/phpstan-doctrine": "^2.0"
     },

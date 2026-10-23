@@ -46,6 +46,7 @@ class Product
     #[ORM\Column(name: 'deleted_at', type: 'string', nullable: true)]
     private ?string $deleted_at = null;
 
+    /** @var Collection<int,InvoiceDetail> */
     #[ORM\OneToMany(targetEntity: InvoiceDetail::class, mappedBy: 'product')]
     private Collection $invoice_details;
 

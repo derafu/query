@@ -94,7 +94,7 @@ final class PathParser implements PathParserInterface
      * Each segment represents a field/column name with optional metadata.
      *
      * @param string $expression The segment expression to parse.
-     * @param array<string,mixed> $syntheticOptions Options injected by the parser
+     * @param array<string,string> $syntheticOptions Options injected by the parser
      *        (appended after user-defined options).
      * @return Segment The parsed segment.
      * @throws InvalidArgumentException If segment format is invalid.
@@ -135,10 +135,13 @@ final class PathParser implements PathParserInterface
     }
 
     /**
-     * Parses the options string into an associative array.
+     * Parses options without silently overwriting earlier assignments.
+     *
+     * Scalar options are unique. Mapping options accumulate distinct source
+     * columns, and cannot be mixed with scalar values.
      *
      * @param string $options The options string (e.g., "key1:value1,key2:value2").
-     * @return array<string,mixed> The parsed options.
+     * @return array<array-key,string|array<array-key,string>> The parsed options.
      * @throws InvalidArgumentException If options format is invalid.
      */
     private function parseOptions(string $options): array
@@ -177,15 +180,37 @@ final class PathParser implements PathParserInterface
                     );
                 }
 
-                // For options with equals, create a nested array if not exists.
-                if (!isset($result[$key])) {
-                    $result[$key] = [];
+                $mapping = $result[$key] ?? [];
+                if (!is_array($mapping)) {
+                    throw new InvalidArgumentException([
+                        'Option "{option}" cannot mix scalar and mapping values.',
+                        'option' => $key,
+                    ]);
+                }
+                if (array_key_exists($leftPart, $mapping)) {
+                    throw new InvalidArgumentException([
+                        'Column "{column}" is defined more than once in option "{option}".',
+                        'column' => $leftPart,
+                        'option' => $key,
+                    ]);
                 }
 
-                // Store as key-value pair within the option.
-                $result[$key][$leftPart] = $rightPart;
+                $mapping[$leftPart] = $rightPart;
+                $result[$key] = $mapping;
             } else {
-                // Simple option.
+                if (isset($result[$key])) {
+                    if (is_array($result[$key])) {
+                        throw new InvalidArgumentException([
+                            'Option "{option}" cannot mix scalar and mapping values.',
+                            'option' => $key,
+                        ]);
+                    }
+                    throw new InvalidArgumentException([
+                        'Option "{option}" is defined more than once.',
+                        'option' => $key,
+                    ]);
+                }
+
                 $result[$key] = $value;
             }
         }

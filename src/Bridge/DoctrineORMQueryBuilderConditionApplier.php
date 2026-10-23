@@ -13,7 +13,10 @@ declare(strict_types=1);
 namespace Derafu\Query\Bridge;
 
 use Derafu\Query\Bridge\Contract\QueryBuilderConditionApplierInterface;
+use Derafu\Query\Bridge\DoctrineORM\Dql\MySqlBinaryStringFunction;
+use Derafu\Query\Bridge\DoctrineORM\NumericComparisonType;
 use Derafu\Query\Bridge\Exception\UnsupportedOperatorException;
+use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Filter\CompositeCondition;
 use Derafu\Query\Filter\Condition;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
@@ -21,12 +24,19 @@ use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Contract\SegmentInterface;
 use Derafu\Query\Filter\Path;
 use Derafu\Query\Filter\Segment;
+use Derafu\Query\Operator\Contract\OperatorInterface;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
+use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Doctrine\DBAL\Platforms\MySQLPlatform;
 use Doctrine\DBAL\Platforms\OraclePlatform;
 use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Platforms\SQLServerPlatform;
-use Doctrine\ORM\Mapping\InverseSideMapping;
+use Doctrine\DBAL\Types\Type;
+use Doctrine\DBAL\Types\Types;
+use Doctrine\ORM\Query\Expr\Join;
+use Doctrine\ORM\Query\Lexer;
+use Doctrine\ORM\Query\TokenType;
 use Doctrine\ORM\QueryBuilder as DoctrineORMQueryBuilder;
 
 /**
@@ -66,19 +76,25 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
         assert($queryBuilder instanceof DoctrineORMQueryBuilder);
 
         $this->assertDqlCompatible($condition);
+        $this->configureDqlFunctions($queryBuilder);
         $this->addOrmJoins($queryBuilder, $condition);
 
         $rootAlias = $this->getRootAlias($queryBuilder);
 
-        ['sql' => $sql, 'parameters' => $params] = $this->buildDql(
+        $compiled = $this->buildDql(
             $queryBuilder,
             $condition,
-            $rootAlias
+            $rootAlias,
+            $this->createDqlAliasScope($queryBuilder, $condition)
         );
 
-        $queryBuilder->andWhere($sql);
-        foreach ($params as $name => $value) {
-            $queryBuilder->setParameter($name, $value);
+        $queryBuilder->andWhere($compiled['sql']);
+        foreach ($compiled['parameters'] as $name => $value) {
+            $type = $compiled['types'][$name] ?? null;
+            if ($type === NumericComparisonType::class && !Type::hasType($type)) {
+                Type::addType($type, NumericComparisonType::class);
+            }
+            $queryBuilder->setParameter($name, $value, $type);
         }
     }
 
@@ -92,6 +108,7 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
         assert($queryBuilder instanceof DoctrineORMQueryBuilder);
 
         $this->assertDqlCompatible($condition);
+        $this->configureDqlFunctions($queryBuilder);
 
         $rootAlias = $this->getRootAlias($queryBuilder);
         if ($rootAlias !== '') {
@@ -100,12 +117,26 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
 
         ['sql' => $sql, 'parameters' => $params] = $this->buildConditionSql(
             $this->resolveDriver($queryBuilder),
-            $condition
+            $condition,
+            dql: true
         );
 
         $queryBuilder->andHaving($sql);
         foreach ($params as $name => $value) {
             $queryBuilder->setParameter($name, $value);
+        }
+    }
+
+    /**
+     * Registers MySQL-specific DQL support without consumer configuration.
+     */
+    private function configureDqlFunctions(DoctrineORMQueryBuilder $qb): void
+    {
+        if ($this->resolveDriver($qb) === 'mysql') {
+            $qb->getEntityManager()->getConfiguration()->addCustomStringFunction(
+                'DERAFU_MYSQL_BINARY_STRING',
+                MySqlBinaryStringFunction::class
+            );
         }
     }
 
@@ -154,48 +185,52 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
      * Recursively builds DQL for a condition tree, dispatching EXISTS paths to
      * buildExistsDql() and regular conditions through qualifyPaths() + SQL builder.
      *
-     * @return array{sql: string, parameters: array<string, mixed>}
+     * @return array{sql: string, parameters: array<string, mixed>, types?: array<string, string>}
      */
     private function buildDql(
         DoctrineORMQueryBuilder $qb,
         ConditionInterface|CompositeConditionInterface $condition,
-        string $rootAlias
+        string $rootAlias,
+        AliasScope $aliasScope
     ): array {
         if ($condition instanceof CompositeConditionInterface) {
             $parts = [];
             $parameters = [];
+            $types = [];
             foreach ($condition->getConditions() as $sub) {
-                $result = $this->buildDql($qb, $sub, $rootAlias);
+                $result = $this->buildDql($qb, $sub, $rootAlias, $aliasScope);
                 $parts[] = $result['sql'];
                 $parameters = array_merge($parameters, $result['parameters']);
+                $types = array_merge($types, $result['types'] ?? []);
             }
             $sql = '(' . implode(' ' . $condition->getType() . ' ', $parts) . ')';
-            return ['sql' => $sql, 'parameters' => $parameters];
+            return ['sql' => $sql, 'parameters' => $parameters, 'types' => $types];
         }
 
-        if ($condition->getPath()->getFirstSegment()->getOption('subquery') === 'exists') {
-            return $this->buildExistsDql($qb, $condition, $rootAlias);
+        if ($this->readSegmentOptions($condition->getPath()->getFirstSegment())->string('subquery') === 'exists') {
+            return $this->buildExistsDql($qb, $condition, $rootAlias, $aliasScope);
         }
 
         if ($rootAlias !== '') {
             $condition = $this->qualifyPaths($condition, $rootAlias);
         }
 
-        return $this->buildConditionSql($this->resolveDriver($qb), $condition);
+        return $this->buildConditionSql($this->resolveDriver($qb), $condition, dql: true);
     }
 
     /**
      * Generates DQL for an EXISTS-path condition (___assoc syntax).
      *
-     * Simple emptiness (is:empty / isnot:empty) → DQL SIZE() comparison.
+     * Collection emptiness uses SIZE(); single-valued associations use EXISTS().
      * Column filter → correlated EXISTS() DQL subquery via entity metadata.
      *
-     * @return array{sql: string, parameters: array<string, mixed>}
+     * @return array{sql: string, parameters: array<string, mixed>, types?: array<string, string>}
      */
     private function buildExistsDql(
         DoctrineORMQueryBuilder $qb,
         ConditionInterface $condition,
-        string $rootAlias
+        string $rootAlias,
+        AliasScope $aliasScope
     ): array {
         $segments  = $condition->getPath()->getSegments();
         $filter    = $condition->getFilter();
@@ -206,7 +241,7 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
         $existsSegments = [];
         $columnSegment  = null;
         foreach ($segments as $segment) {
-            if ($segment->getOption('subquery') === 'exists') {
+            if ($this->readSegmentOptions($segment)->string('subquery') === 'exists') {
                 $existsSegments[] = $segment;
             } else {
                 $columnSegment = $segment;
@@ -215,24 +250,24 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
 
         $assocName = $existsSegments[0]->getName();
 
+        $meta = $qb->getEntityManager()->getClassMetadata($this->getRootEntityClass($qb));
+        $assocMapping = $meta->getAssociationMapping($assocName);
+
         if ($columnSegment === null) {
-            $isEmpty   = ($effective->getSymbol() === 'is:empty');
-            $comparison = $isEmpty ? '= 0' : '> 0';
+            $isEmpty = ($effective->getSymbol() === 'is:empty');
+            if ($assocMapping->isToMany() && count($existsSegments) === 1) {
+                return [
+                    'sql' => 'SIZE(' . $rootAlias . '.' . $assocName . ') ' . ($isEmpty ? '= 0' : '> 0'),
+                    'parameters' => [],
+                ];
+            }
+
+            $subquery = $this->buildAssociationSubquery($qb, $rootAlias, $existsSegments, $this->resolveAssociationAliases($qb, $existsSegments, $aliasScope));
             return [
-                'sql'        => 'SIZE(' . $rootAlias . '.' . $assocName . ') ' . $comparison,
+                'sql' => ($isEmpty ? 'NOT ' : '') . 'EXISTS(SELECT 1 ' . $subquery . ')',
                 'parameters' => [],
             ];
         }
-
-        // Column filter: correlated EXISTS subquery using entity metadata.
-        $em              = $qb->getEntityManager();
-        $rootEntityClass = $this->getRootEntityClass($qb);
-        $meta            = $em->getClassMetadata($rootEntityClass);
-        $assocMapping    = $meta->getAssociationMapping($assocName);
-        $targetClass     = $assocMapping->targetEntity;
-        $inversedField   = $assocMapping instanceof InverseSideMapping
-            ? $assocMapping->backRefFieldName()
-            : null;
 
         // Aggregate scalar subquery: ___assoc__AGG(col)?op:value
         if (preg_match('/^(SUM|AVG|COUNT|MIN|MAX)\s*\((.+)\)$/i', $columnSegment->getName(), $m)) {
@@ -241,14 +276,16 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
                 $condition,
                 $rootAlias,
                 $existsSegments[0],
-                $targetClass,
-                $inversedField,
+                $existsSegments,
+                $assocMapping->isToMany() && count($existsSegments) === 1,
                 strtoupper($m[1]),
-                trim($m[2])
+                trim($m[2]),
+                $aliasScope
             );
         }
 
-        $subAlias = '_' . $assocName . '0';
+        $aliases = $this->resolveAssociationAliases($qb, $existsSegments, $aliasScope);
+        $subAlias = $aliases['targets'][count($aliases['targets']) - 1];
 
         // Build the column filter using SqlBuilderWhere via a 2-segment path.
         $prefixSegment    = new Segment($subAlias, ['alias' => $subAlias]);
@@ -257,17 +294,12 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
 
         ['sql' => $filterSql, 'parameters' => $filterParams] = $this->buildConditionSql(
             $this->resolveDriver($qb),
-            $qualifiedCondition
+            $qualifiedCondition,
+            dql: true
         );
 
-        $whereParts = [];
-        if ($inversedField !== null) {
-            $whereParts[] = $subAlias . '.' . $inversedField . ' = ' . $rootAlias;
-        }
-        $whereParts[] = $filterSql;
-
-        $dql = 'EXISTS(SELECT ' . $subAlias . '.id FROM ' . $targetClass . ' ' . $subAlias
-            . ' WHERE ' . implode(' AND ', $whereParts) . ')';
+        $subquery = $this->buildAssociationSubquery($qb, $rootAlias, $existsSegments, $aliases);
+        $dql = 'EXISTS(SELECT 1 ' . $subquery . ' AND (' . $filterSql . '))';
 
         return ['sql' => $dql, 'parameters' => $filterParams];
     }
@@ -275,34 +307,34 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
     /**
      * Generates DQL for an aggregate scalar subquery condition (___assoc__AGG(col)?op).
      *
-     * Produces: (SELECT AGG(alias.prop) FROM EntityClass alias WHERE alias.rel = rootAlias) op :param
+     * Aggregates use the same mapped association traversal as ordinary EXISTS filters.
      *
-     * COUNT(*) is not valid DQL; it is rewritten to COUNT(alias.primaryKeyField).
+     * COUNT(*) is not valid DQL; it is rewritten to COUNT(alias).
+     * Comparisons use EXISTS with HAVING so scalar, list, range and null
+     * operators share a DQL-compatible aggregate expression.
      *
-     * @return array{sql: string, parameters: array<string, mixed>}
+     * @param list<SegmentInterface> $associationSegments
+     * @return array{sql: string, parameters: array<string, mixed>, types?: array<string, string>}
      */
     private function buildAggregateScalarDql(
         DoctrineORMQueryBuilder $qb,
         ConditionInterface $condition,
         string $rootAlias,
         SegmentInterface $primarySegment,
-        string $targetClass,
-        ?string $inversedField,
+        array $associationSegments,
+        bool $canUseSize,
         string $funcName,
-        string $funcArg
+        string $funcArg,
+        AliasScope $aliasScope
     ): array {
-        $subAlias = $this->sanitizeSqlSimpleIdentifier(
-            $primarySegment->getOption('alias') ?? strtolower($primarySegment->getName()[0])
-        );
-
-        // DQL aggregate expression; COUNT(*) must become COUNT(alias.pk).
+        // DQL aggregate expression; COUNT(*) must become COUNT(alias).
         if ($funcArg === '*') {
             // COUNT(*) = 0 / > 0 → rewrite to DQL SIZE() (native DQL, same optimizer benefit).
             $filter    = $condition->getFilter();
             $operator  = $filter->getOperator();
             $effective = $operator->getBaseOperator() ?? $operator;
             $sizeComp  = $this->resolveCountStarToSizeComparison($effective, $filter->getValue());
-            if ($sizeComp !== null) {
+            if ($sizeComp !== null && $canUseSize) {
                 $assocName = $this->sanitizeSqlSimpleIdentifier($primarySegment->getName());
                 return [
                     'sql'        => 'SIZE(' . $rootAlias . '.' . $assocName . ') ' . $sizeComp,
@@ -310,27 +342,19 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
                 ];
             }
 
-            $em       = $qb->getEntityManager();
-            $pkFields = $em->getClassMetadata($targetClass)->getIdentifierFieldNames();
-            $pkField  = $this->sanitizeSqlSimpleIdentifier($pkFields[0] ?? 'id');
-            $aggExpr  = $funcName . '(' . $subAlias . '.' . $pkField . ')';
-        } else {
-            $aggExpr = $funcName . '(' . $subAlias . '.' . $this->sanitizeSqlSimpleIdentifier($funcArg) . ')';
         }
 
-        // Correlation condition using the DQL association field (not the SQL column).
-        $whereParts = [];
-        if ($inversedField !== null) {
-            $whereParts[] = $subAlias . '.' . $inversedField . ' = ' . $rootAlias;
-        }
+        $aliases = $this->resolveAssociationAliases($qb, $associationSegments, $aliasScope);
+        $subAlias = $aliases['targets'][count($aliases['targets']) - 1];
+        $aggExpr = $funcName . '(' . ($funcArg === '*'
+            ? $subAlias
+            : $subAlias . '.' . $this->sanitizeSqlSimpleIdentifier($funcArg)) . ')';
 
-        $dqlSubquery = 'SELECT ' . $aggExpr . ' FROM ' . $targetClass . ' ' . $subAlias;
-        if (!empty($whereParts)) {
-            $dqlSubquery .= ' WHERE ' . implode(' AND ', $whereParts);
-        }
+        $dqlSubquery = 'SELECT ' . $aggExpr . ' '
+            . $this->buildAssociationSubquery($qb, $rootAlias, $associationSegments, $aliases);
 
         // Use a DERAFUAGG placeholder to generate the comparison DQL fragment
-        // via buildConditionSql(), then replace the placeholder with the subquery.
+        // via buildConditionSql(), then replace the placeholder with the aggregate.
         $placeholderSegment   = new Segment('DERAFUAGG', []);
         $placeholderPath      = new Path([$placeholderSegment]);
         $placeholderCondition = new Condition(
@@ -341,12 +365,174 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
 
         ['sql' => $compSql, 'parameters' => $compParams] = $this->buildConditionSql(
             $this->resolveDriver($qb),
-            $placeholderCondition
+            $placeholderCondition,
+            dql: true
         );
 
-        $finalSql = preg_replace('/\bDERAFUAGG\b/', '(' . $dqlSubquery . ')', $compSql, 1);
+        $resultType = $this->resolveAggregateResultType($qb, $associationSegments, $funcName, $funcArg);
+        $operator = $condition->getFilter()->getOperator();
+        $effective = $operator->getBaseOperator() ?? $operator;
+        $types = [];
+        if (in_array($effective->getType(), ['standard', 'list', 'range'], true)
+            && in_array($resultType, [Types::SMALLINT, Types::INTEGER, Types::BIGINT, Types::DECIMAL, Types::NUMBER, Types::SMALLFLOAT, Types::FLOAT], true)
+        ) {
+            foreach ($compParams as $name => $value) {
+                if ($value === null) {
+                    continue;
+                }
+                // Validate each scalar/list/range operand before SQLite's CAST,
+                // which would otherwise silently turn invalid text into zero.
+                if (!is_string($value) || !is_numeric($value)) {
+                    throw new InvalidArgumentException([
+                        'Invalid value format for operator {operator}: {value}.',
+                        'operator' => $operator->getSymbol(),
+                        'value' => $condition->getFilter()->getValue() ?? '',
+                    ]);
+                }
+                $types[$name] = NumericComparisonType::class;
+            }
+        }
 
-        return ['sql' => $finalSql, 'parameters' => $compParams];
+        $finalSql = preg_replace('/\bDERAFUAGG\b/', $aggExpr, $compSql, 1);
+        if ($finalSql === null) {
+            throw new RuntimeException([
+                'Failed to substitute aggregate DQL subquery: {error}',
+                'error' => preg_last_error_msg(),
+            ]);
+        }
+
+        return [
+            'sql' => 'EXISTS (' . $dqlSubquery . ' HAVING ' . $finalSql . ')',
+            'parameters' => $compParams,
+            'types' => $types,
+        ];
+    }
+
+    /**
+     * Resolves aggregate semantics from the complete association path and the
+     * mapped field. MIN/MAX preserve text/date types; numeric thresholds retain
+     * their decimal representation even when COUNT itself returns an integer.
+     *
+     * @param list<SegmentInterface> $segments
+     */
+    private function resolveAggregateResultType(
+        DoctrineORMQueryBuilder $qb,
+        array $segments,
+        string $function,
+        string $field
+    ): string {
+        if ($function === 'COUNT') {
+            return Types::BIGINT;
+        }
+
+        $em = $qb->getEntityManager();
+        $metadata = $em->getClassMetadata($this->getRootEntityClass($qb));
+        foreach ($segments as $segment) {
+            $metadata = $em->getClassMetadata($metadata->getAssociationMapping($segment->getName())->targetEntity);
+        }
+        $fieldType = $metadata->getTypeOfField($field) ?? Types::STRING;
+        if ($function === 'AVG') {
+            return in_array($fieldType, [Types::DECIMAL, Types::NUMBER], true) ? $fieldType : Types::FLOAT;
+        }
+
+        return $fieldType;
+    }
+
+    /**
+     * Doctrine requires automatic aliases to be unique across the entire DQL
+     * query. Rebuild the allocation namespace from the current query on each
+     * apply(), so repeated calls, cloned builders and different applier instances
+     * cannot reset it to names that already exist. The lexer excludes literals
+     * and parameters. Reserving identifier tokens is conservative for generated
+     * names only; explicit aliases are validated in their local scope.
+     */
+    private function createDqlAliasScope(
+        DoctrineORMQueryBuilder $qb,
+        ConditionInterface|CompositeConditionInterface $condition
+    ): AliasScope {
+        $reserved = $qb->getAllAliases();
+        $lexer = new Lexer($qb->getDQL());
+        while ($lexer->moveNext()) {
+            $token = $lexer->lookahead;
+            if ($token->type === TokenType::T_IDENTIFIER) {
+                $reserved[] = $token->value;
+            }
+        }
+
+        // Reserve explicit names from the complete incoming condition tree
+        // before allocating any helper alias in any of its subqueries.
+        foreach ($this->extractPaths($condition) as $path) {
+            foreach ($path->getSegments() as $segment) {
+                $explicit = $this->readSegmentOptions($segment)->string('alias');
+                if ($explicit !== null) {
+                    $reserved[] = $this->sanitizeSqlSimpleIdentifier($explicit);
+                }
+            }
+        }
+
+        return new AliasScope($reserved);
+    }
+
+    /**
+     * @param list<SegmentInterface> $segments
+     * @return array{source: string, targets: list<string>}
+     */
+    private function resolveAssociationAliases(DoctrineORMQueryBuilder $qb, array $segments, AliasScope $allocator): array
+    {
+        $scope = new AliasScope($qb->getAllAliases());
+        foreach ($segments as $segment) {
+            $explicit = $this->readSegmentOptions($segment)->string('alias');
+            if ($explicit !== null) {
+                $scope->reserve($this->sanitizeSqlSimpleIdentifier($explicit));
+            }
+        }
+        $source = $allocator->generate();
+        $targets = [];
+        foreach ($segments as $segment) {
+            $explicit = $this->readSegmentOptions($segment)->string('alias');
+            $targets[] = $explicit !== null ? $this->sanitizeSqlSimpleIdentifier($explicit) : $allocator->generate();
+        }
+
+        return ['source' => $source, 'targets' => $targets];
+    }
+
+    /**
+     * Traverses mapped associations from a correlated copy of the root entity.
+     * Doctrine resolves owning sides and join tables; no inverse property or
+     * conventional identifier name is required.
+     *
+     * @param list<SegmentInterface> $segments
+     * @param array{source: string, targets: list<string>} $aliases
+     */
+    private function buildAssociationSubquery(
+        DoctrineORMQueryBuilder $qb,
+        string $rootAlias,
+        array $segments,
+        array $aliases
+    ): string {
+        $rootClass = $this->getRootEntityClass($qb);
+        $metadata = $qb->getEntityManager()->getClassMetadata($rootClass);
+        $sourceAlias = $aliases['source'];
+        $from = 'FROM ' . $rootClass . ' ' . $sourceAlias;
+        $parentAlias = $sourceAlias;
+        foreach ($segments as $key => $segment) {
+            $alias = $aliases['targets'][$key];
+            $from .= ' JOIN ' . $parentAlias . '.' . $this->sanitizeSqlSimpleIdentifier($segment->getName()) . ' ' . $alias;
+            $parentAlias = $alias;
+        }
+
+        $correlation = [];
+        foreach ($metadata->getIdentifierFieldNames() as $field) {
+            $inner = $sourceAlias . '.' . $field;
+            $outer = $rootAlias . '.' . $field;
+            if ($metadata->hasAssociation($field)) {
+                $inner = 'IDENTITY(' . $inner . ')';
+                $outer = 'IDENTITY(' . $outer . ')';
+            }
+            $correlation[] = $inner . ' = ' . $outer;
+        }
+
+        return $from . ' WHERE ' . implode(' AND ', $correlation);
     }
 
     /**
@@ -354,11 +540,13 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
      *
      * Returns the comparison suffix ('= 0', '> 0', etc.) when the operator and
      * value form a pure existence check, or null when not rewritable.
+     *
+     * @param OperatorInterface $effective
      */
-    private function resolveCountStarToSizeComparison(object $effective, mixed $value): ?string
+    private function resolveCountStarToSizeComparison(object $effective, ?string $value): ?string
     {
         $symbol = $effective->getSymbol();
-        $v      = trim((string)($value ?? ''));
+        $v      = trim($value ?? '');
 
         return match (true) {
             $symbol === 'is:empty'                   => '= 0',
@@ -375,16 +563,17 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
 
     /**
      * Returns the entity class name of the first FROM entry in the DQL query.
+     *
+     * @return class-string
      */
     private function getRootEntityClass(DoctrineORMQueryBuilder $qb): string
     {
-        $from = $qb->getDQLPart('from');
-
-        if (empty($from)) {
-            return '';
+        $entityClass = $qb->getRootEntities()[0] ?? null;
+        if ($entityClass === null) {
+            throw new RuntimeException('A correlated DQL subquery requires a root entity in the FROM clause.');
         }
 
-        return $from[0]->getFrom();
+        return $entityClass;
     }
 
     /**
@@ -423,13 +612,7 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
      */
     private function getRootAlias(DoctrineORMQueryBuilder $qb): string
     {
-        $from = $qb->getDQLPart('from');
-
-        if (empty($from)) {
-            return '';
-        }
-
-        return $from[0]->getAlias();
+        return $qb->getRootAliases()[0] ?? '';
     }
 
     /**
@@ -439,7 +622,14 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
         DoctrineORMQueryBuilder $qb,
         ConditionInterface|CompositeConditionInterface $condition
     ): void {
-        $paths = $this->extractPaths($condition);
+        $paths = [];
+        foreach ($this->extractPaths($condition) as $path) {
+            // EXISTS paths build their complete association traversal inside
+            // the correlated subquery, not in the outer query's JOIN scope.
+            if ($this->readSegmentOptions($path->getFirstSegment())->string('subquery') !== 'exists') {
+                $paths[] = $path;
+            }
+        }
 
         foreach ($this->buildOrmJoinSpecsFromPaths($paths) as $spec) {
             if (!$this->hasOrmJoin($qb, $spec['alias'])) {
@@ -456,7 +646,7 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
      */
     private function hasOrmJoin(DoctrineORMQueryBuilder $qb, string $alias): bool
     {
-        $joins = $qb->getDQLPart('join');
+        $joins = $this->readOrmJoins($qb);
 
         foreach ($joins as $joinList) {
             foreach ($joinList as $join) {
@@ -467,5 +657,33 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
         }
 
         return false;
+    }
+
+    /**
+     * @return array<array-key,array<array-key,Join>>
+     */
+    private function readOrmJoins(DoctrineORMQueryBuilder $qb): array
+    {
+        $joins = $qb->getDQLPart('join');
+        if (!is_array($joins)) {
+            throw new RuntimeException('Unexpected Doctrine ORM QueryBuilder join state.');
+        }
+
+        $validated = [];
+        foreach ($joins as $alias => $group) {
+            if (!is_array($group)) {
+                throw new RuntimeException('Unexpected Doctrine ORM QueryBuilder join state.');
+            }
+            $validatedGroup = [];
+            foreach ($group as $key => $join) {
+                if (!$join instanceof Join) {
+                    throw new RuntimeException('Unexpected Doctrine ORM QueryBuilder join state.');
+                }
+                $validatedGroup[$key] = $join;
+            }
+            $validated[$alias] = $validatedGroup;
+        }
+
+        return $validated;
     }
 }

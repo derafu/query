@@ -12,7 +12,9 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Integration\Bridge;
 
+use Derafu\Query\Bridge\Illuminate\CompiledCondition;
 use Derafu\Query\Bridge\IlluminateQueryBuilderConditionApplier;
+use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
 use Derafu\Query\Builder\Sql\SqlQuery;
 use Derafu\Query\Filter\CompositeCondition;
@@ -28,15 +30,22 @@ use Derafu\Query\Filter\Segment;
 use Derafu\Query\Operator\Operator;
 use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
+use Derafu\TestsQuery\Fixture\Models\IlluminateCustomer;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Database\Connection;
+use Illuminate\Database\ConnectionResolver;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as IlluminateQueryBuilder;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 
+require_once __DIR__ . '/../../../fixtures/models/IlluminateCustomer.php';
+
+#[UsesClass(AliasScope::class)]
 #[CoversClass(IlluminateQueryBuilderConditionApplier::class)]
+#[CoversClass(CompiledCondition::class)]
 #[UsesClass(SqlBuilderWhere::class)]
 #[UsesClass(SqlQuery::class)]
 #[UsesClass(CompositeCondition::class)]
@@ -69,12 +78,16 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
         $this->connection = $capsule->getConnection();
 
         $pdo = $this->connection->getPdo();
-        $pdo->exec(file_get_contents(
+        $sql = file_get_contents(
             __DIR__ . '/../../../fixtures/integration/billing_schema.sql'
-        ));
-        $pdo->exec(file_get_contents(
+        );
+        $this->assertIsString($sql);
+        $pdo->exec($sql);
+        $sql = file_get_contents(
             __DIR__ . '/../../../fixtures/integration/billing_data.sql'
-        ));
+        );
+        $this->assertIsString($sql);
+        $pdo->exec($sql);
 
         $pathParser = new PathParser();
         $loader = new OperatorLoader();
@@ -88,6 +101,10 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
         $this->applier = new IlluminateQueryBuilderConditionApplier();
     }
 
+    /**
+     * @param array{sql:string,parameters:array<string,mixed>} $sql
+     * @param array{table?:string,alias?:string,select?:literal-string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:literal-string,alias?:string},leftJoin?:array{table:string,condition:literal-string,alias?:string},rightJoin?:array{table:string,condition:literal-string,alias?:string},groupBy?:literal-string|list<literal-string>,orderBy?:array<literal-string,literal-string>,limit?:int,offset?:int} $query
+     */
     #[DataProvider('queryProvider')]
     public function testSqlQueries(
         string $description,
@@ -105,6 +122,102 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
         $this->assertSame($expected, $actual, $description);
     }
 
+    public function testWhereCanBeAppliedBeforeTheConsumerSetsFrom(): void
+    {
+        $qb = $this->connection->query()->select('id');
+        $this->applier->apply($qb, $this->expressionParser->parse('status?=active'));
+        $qb->from('customers')->orderBy('id');
+
+        $this->assertSame([['id' => 1], ['id' => 2], ['id' => 4]], $qb->get()->map(fn ($row) => (array) $row)->all());
+    }
+
+    public function testEloquentBuilderReceivesTheCompiledCondition(): void
+    {
+        $previous = Model::getConnectionResolver();
+        $resolver = new ConnectionResolver(['default' => $this->connection]);
+        $resolver->setDefaultConnection('default');
+        Model::setConnectionResolver($resolver);
+        try {
+            $builder = IlluminateCustomer::query()->orderBy('id');
+            $this->applier->apply($builder, $this->expressionParser->parse('status?=active'));
+            $this->assertSame([1, 2, 4], $builder->pluck('id')->all());
+        } finally {
+            if ($previous === null) {
+                Model::unsetConnectionResolver();
+            } else {
+                Model::setConnectionResolver($previous);
+            }
+        }
+    }
+
+    public function testFromRawPreservesTheTableAlias(): void
+    {
+        $qb = $this->connection->query()->fromRaw('products as p')->select('p.id')->orderBy('p.id');
+        $condition = $this->expressionParser->parse('p__price?>500');
+        $this->applier->apply($qb, $condition);
+
+        $this->assertSame(['500'], $qb->getBindings());
+        $this->assertSame([['id' => 1], ['id' => 2]], $qb->get()->map(fn ($row) => (array) $row)->all());
+    }
+
+    public function testFromSubqueryBindingsRemainSeparateFromWhereBindings(): void
+    {
+        $qb = $this->connection->query()
+            ->fromRaw('(SELECT * FROM products WHERE category = ?) as p', ['electronics'])
+            ->select('p.id')
+            ->orderBy('p.id');
+        $condition = $this->expressionParser->parse('p__price?>1000');
+        $this->applier->apply($qb, $condition);
+
+        $bindings = $qb->getRawBindings();
+        $this->assertSame(['electronics'], $bindings['from']);
+        $this->assertSame(['1000'], $bindings['where']);
+        $this->assertSame(['electronics', '1000'], $qb->getBindings());
+        $this->assertSame([['id' => 1]], $qb->get()->map(fn ($row) => (array) $row)->all());
+    }
+
+    public function testFromRawAliasIsUsedForExistsCorrelation(): void
+    {
+        $qb = $this->connection->query()->fromRaw('customers as c')->select('c.id')->orderBy('c.id');
+        $condition = $this->expressionParser->parse('___invoices[on:id=customer_id]__status?=paid');
+        $this->applier->apply($qb, $condition);
+
+        $this->assertSame(['paid'], $qb->getBindings());
+        $this->assertSame([['id' => 1], ['id' => 2]], $qb->get()->map(fn ($row) => (array) $row)->all());
+    }
+
+    public function testCompiledWhereAndHavingPreserveExistingBindings(): void
+    {
+        $qb = $this->connection->table('customers as c')
+            ->select('c.type')
+            ->selectRaw('COUNT(*) AS total')
+            ->where('c.status', 'active')
+            ->groupBy('c.type')
+            ->havingRaw('COUNT(*) >= ?', [0]);
+        $this->applier->apply($qb, $this->expressionParser->parse('c__id?>1'));
+        $this->applier->applyHaving($qb, $this->expressionParser->parse('c__type?=company'));
+
+        $bindings = $qb->getRawBindings();
+        $this->assertSame(['active', '1'], $bindings['where']);
+        $this->assertSame([0, 'company'], $bindings['having']);
+        $this->assertSame(['active', '1', 0, 'company'], $qb->getBindings());
+        $this->assertSame([['type' => 'company', 'total' => 2]], $qb->get()->map(fn ($row) => (array) $row)->all());
+    }
+
+    public function testCompiledConditionsKeepSqlLikeValuesInBindings(): void
+    {
+        $value = "John Smith' OR 1=1 --";
+        $qb = $this->connection->table('customers')->select('id');
+        $this->applier->apply($qb, $this->expressionParser->parse('name?=' . $value));
+
+        $this->assertSame([$value], $qb->getBindings());
+        $this->assertStringNotContainsString($value, $qb->toSql());
+        $this->assertSame([], $qb->get()->all());
+    }
+
+    /**
+     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:string,alias?:string,select?:literal-string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:literal-string,alias?:string},leftJoin?:array{table:string,condition:literal-string,alias?:string},rightJoin?:array{table:string,condition:literal-string,alias?:string},groupBy?:literal-string|list<literal-string>,orderBy?:array<literal-string,literal-string>,limit?:int,offset?:int}}>
+     */
     public static function queryProvider(): array
     {
         $cases = require __DIR__ . '/../../../fixtures/integration/queries_integration.php';
@@ -123,6 +236,8 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
 
     /**
      * Builds an Illuminate QueryBuilder from a query config array.
+     *
+     * @param array{table?:string,alias?:string,select?:literal-string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:literal-string,alias?:string},leftJoin?:array{table:string,condition:literal-string,alias?:string},rightJoin?:array{table:string,condition:literal-string,alias?:string},groupBy?:literal-string|list<literal-string>,orderBy?:array<literal-string,literal-string>,limit?:int,offset?:int} $config
      */
     private function buildQueryFromConfig(array $config): IlluminateQueryBuilder
     {
@@ -136,7 +251,7 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
 
         // SELECT.
         if (isset($config['select'])) {
-            $qb->selectRaw((string) $config['select']);
+            $qb->selectRaw($config['select']);
         }
 
         // DISTINCT.
@@ -210,6 +325,8 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
     /**
      * Builds a CompositeCondition from the where/andWhere/orWhere/andWhereOr
      * config keys, following the same composition logic as SqlQueryBuilder.
+     *
+     * @param array{table?:string,alias?:string,select?:literal-string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:literal-string,alias?:string},leftJoin?:array{table:string,condition:literal-string,alias?:string},rightJoin?:array{table:string,condition:literal-string,alias?:string},groupBy?:literal-string|list<literal-string>,orderBy?:array<literal-string,literal-string>,limit?:int,offset?:int} $config
      */
     private function buildWhereComposite(array $config): ?CompositeConditionInterface
     {
@@ -261,6 +378,8 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
 
     /**
      * Adds one or more expression strings (or arrays of them) to a composite.
+     *
+     * @param string|list<string|list<string>> $conditions
      */
     private function addToComposite(
         CompositeConditionInterface $composite,
@@ -285,6 +404,8 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
     /**
      * Adds orWhere value to an OR composite, handling flat arrays and
      * arrays-of-arrays (multiple OR groups).
+     *
+     * @param string|list<string|list<string>> $conditions
      */
     private function addOrGroupToComposite(
         CompositeConditionInterface $orComposite,

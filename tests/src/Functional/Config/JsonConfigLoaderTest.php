@@ -16,6 +16,7 @@ use Derafu\Query\Config\Contract\ConfigLoaderInterface;
 use Derafu\Query\Config\JsonConfigLoader;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -81,5 +82,43 @@ JSON;
     {
         $this->expectException(RuntimeException::class);
         $this->loader->loadFromFile('/path/to/nonexistent/file.json');
+    }
+
+    #[DataProvider('invalidRootProvider')]
+    public function testRejectsInvalidRoot(string $content): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->loader->loadFromString($content);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function invalidRootProvider(): iterable
+    {
+        yield 'list' => ['["products"]'];
+        yield 'numeric key' => ['{"table":"products","123":"extra"}'];
+        yield 'zero key' => ['{"0":"products"}'];
+        yield 'negative key' => ['{"-1":"products"}'];
+        yield 'scalar root' => ['"products"'];
+    }
+
+    public function testPreservesNestedNumericKeysAndUnknownOptions(): void
+    {
+        $config = $this->loader->loadFromString(
+            '{"table":"products","select":["id","name"],"extension":{"123":["a","b"]}}'
+        );
+
+        $this->assertSame([
+            'table' => 'products',
+            'select' => ['id', 'name'],
+            'extension' => [123 => ['a', 'b']],
+        ], $config);
+    }
+
+    public function testAcceptsEmptyRoot(): void
+    {
+        $this->assertSame([], $this->loader->loadFromString('{}'));
+        $this->assertSame([], $this->loader->loadFromString('[]'));
     }
 }

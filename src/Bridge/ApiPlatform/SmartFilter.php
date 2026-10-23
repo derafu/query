@@ -15,9 +15,11 @@ namespace Derafu\Query\Bridge\ApiPlatform;
 use ApiPlatform\Doctrine\Orm\Filter\FilterInterface;
 use ApiPlatform\Doctrine\Orm\Util\QueryNameGeneratorInterface;
 use ApiPlatform\Metadata\Operation;
+use ApiPlatform\Metadata\Parameter;
 use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\Exception\UnsupportedOperatorException;
 use Derafu\Query\Filter\Contract\CompositeExpressionParserInterface;
+use Derafu\Support\ArrayType;
 use Doctrine\ORM\QueryBuilder;
 use Throwable;
 
@@ -65,8 +67,14 @@ final class SmartFilter implements FilterInterface
         array $context = []
     ): void {
         $parameter = $context['parameter'] ?? null;
-        $property = $parameter?->getProperty();
-        $value = $parameter?->getValue();
+        if ($parameter === null) {
+            return;
+        }
+        if (!$parameter instanceof Parameter) {
+            throw ArrayType::mismatch('parameter', Parameter::class, $parameter);
+        }
+        $property = $parameter->getProperty();
+        $value = $parameter->getValue();
 
         if (
             !is_string($property)

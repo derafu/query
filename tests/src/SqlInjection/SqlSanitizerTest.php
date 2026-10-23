@@ -13,32 +13,24 @@ declare(strict_types=1);
 namespace Derafu\TestsQuery\SqlInjection;
 
 use Derafu\Query\Builder\Sql\SqlSanitizerTrait;
+use Derafu\TestsQuery\Fixture\SqlSanitizer;
+use Derafu\Translation\Exception\Core\TranslatableRuntimeException;
 use PHPUnit\Framework\Attributes\CoversTrait;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\PreserveGlobalState;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
+
+require_once __DIR__ . '/../../fixtures/SqlSanitizer.php';
 
 #[CoversTrait(SqlSanitizerTrait::class)]
 class SqlSanitizerTest extends TestCase
 {
-    private $sanitizer;
+    private SqlSanitizer $sanitizer;
 
     protected function setUp(): void
     {
-        // Create a concrete implementation of the trait for testing.
-        $this->sanitizer = new class () {
-            use SqlSanitizerTrait;
-
-            // Make methods public for testing.
-            public function sanitize(string $expression): string
-            {
-                return $this->sanitizeSqlIdentifier($expression);
-            }
-
-            public function setSanitizeCallback(callable $callback): void
-            {
-                $this->setSanitizeSqlIdentifierCallback($callback);
-            }
-        };
+        $this->sanitizer = new SqlSanitizer();
     }
 
     #[DataProvider('provideSimpleIdentifiers')]
@@ -82,6 +74,39 @@ class SqlSanitizerTest extends TestCase
         $this->assertSame("`table`.`column`", $this->sanitizer->sanitize("table.column"));
     }
 
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testPcreFailureThrowsBeforeCallingTheSanitizerCallback(): void
+    {
+        $jit = ini_get('pcre.jit');
+        $limit = ini_get('pcre.backtrack_limit');
+        $this->assertIsString($jit);
+        $this->assertIsString($limit);
+        $callbackInvoked = false;
+        $this->sanitizer->setSanitizeCallback(function (string $identifier) use (&$callbackInvoked): string {
+            $callbackInvoked = true;
+
+            return $identifier;
+        });
+        $this->expectException(TranslatableRuntimeException::class);
+        $this->expectExceptionMessage('Failed to sanitize SQL identifier: Backtrack limit exhausted');
+
+        try {
+            // A fresh process prevents an already JIT-compiled pattern from
+            // bypassing the interpreter's backtracking limit.
+            ini_set('pcre.jit', '0');
+            ini_set('pcre.backtrack_limit', '0');
+            $this->sanitizer->sanitizeSimple('invalid-name');
+        } finally {
+            ini_set('pcre.backtrack_limit', $limit);
+            ini_set('pcre.jit', $jit);
+            $this->assertFalse($callbackInvoked);
+        }
+    }
+
+    /**
+     * @return array<string,array{string,string}>
+     */
     public static function provideSimpleIdentifiers(): array
     {
         return [
@@ -93,6 +118,9 @@ class SqlSanitizerTest extends TestCase
         ];
     }
 
+    /**
+     * @return array<string,array{string,string}>
+     */
     public static function provideQualifiedIdentifiers(): array
     {
         return [
@@ -102,6 +130,9 @@ class SqlSanitizerTest extends TestCase
         ];
     }
 
+    /**
+     * @return array<string,array{string,string}>
+     */
     public static function provideAggregateFunctions(): array
     {
         return [
@@ -113,6 +144,9 @@ class SqlSanitizerTest extends TestCase
         ];
     }
 
+    /**
+     * @return array<string,array{string,string}>
+     */
     public static function provideAliasingExpressions(): array
     {
         return [
@@ -123,6 +157,9 @@ class SqlSanitizerTest extends TestCase
         ];
     }
 
+    /**
+     * @return array<string,array{string,string}>
+     */
     public static function providePotentialSqlInjections(): array
     {
         return [

@@ -13,6 +13,8 @@ declare(strict_types=1);
 namespace Derafu\Query\Operator;
 
 use Derafu\Query\Operator\Contract\OperatorInterface;
+use Derafu\Support\ArrayReader;
+use Derafu\Support\ArrayType;
 
 /**
  * Represents a query operator.
@@ -23,17 +25,20 @@ use Derafu\Query\Operator\Contract\OperatorInterface;
  */
 final class Operator implements OperatorInterface
 {
+    private readonly ArrayReader $reader;
+
     /**
      * Creates a new operator instance.
      *
      * @param string $symbol The operator's symbol.
-     * @param array $config Configuration array for the operator.
+     * @param array<array-key,mixed> $config Configuration array for the operator.
      */
     public function __construct(
         private readonly string $symbol,
         private readonly array $config,
         private readonly ?OperatorInterface $baseOperator = null
     ) {
+        $this->reader = new ArrayReader($config, $symbol);
     }
 
     /**
@@ -49,7 +54,7 @@ final class Operator implements OperatorInterface
      */
     public function getType(): string
     {
-        return $this->config['type'];
+        return $this->reader->require('type', ArrayType::string());
     }
 
     /**
@@ -57,7 +62,7 @@ final class Operator implements OperatorInterface
      */
     public function getName(): string
     {
-        return $this->config['name'];
+        return $this->reader->require('name', ArrayType::string());
     }
 
     /**
@@ -65,7 +70,7 @@ final class Operator implements OperatorInterface
      */
     public function getDescription(): string
     {
-        return $this->config['description'];
+        return $this->reader->require('description', ArrayType::string());
     }
 
     /**
@@ -73,8 +78,8 @@ final class Operator implements OperatorInterface
      */
     public function getValidationPattern(): ?string
     {
-        if (isset($this->config['pattern'])) {
-            return $this->config['pattern'];
+        if (($pattern = $this->reader->string('pattern')) !== null) {
+            return $pattern;
         }
 
         if (str_ends_with($this->symbol, ':')) {
@@ -89,7 +94,17 @@ final class Operator implements OperatorInterface
      */
     public function getCastingRules(): array
     {
-        return $this->config['cast'] ?? [];
+        $rules = $this->reader->array('cast') ?? [];
+        $validated = [];
+        foreach ($rules as $key => $rule) {
+            $validated[$key] = ArrayType::string()->parse(
+                $rule,
+                ArrayType::path('cast', $key),
+                $this->symbol
+            );
+        }
+
+        return $validated;
     }
 
     /**

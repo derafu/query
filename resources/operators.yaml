@@ -109,7 +109,9 @@ operators:
         examples: ['like:Jo_n', 'like:J[oa]n', 'like:%%Smith']
         sql:
             pgsql: '{{column}} LIKE {{value}}'
-            mysql: '{{column}} LIKE BINARY {{value}}'
+            mysql:
+                default: '{{column}} LIKE BINARY {{value}}'
+                dql: '{{column}} LIKE DERAFU_MYSQL_BINARY_STRING({{value}})'
             sqlite: '{{column}} LIKE {{value}}'
 
     'notlike:':
@@ -119,7 +121,9 @@ operators:
         examples: ['notlike:Jo_n', 'notlike:J[oa]n', 'notlike:%%Smith']
         sql:
             pgsql: '{{column}} NOT LIKE {{value}}'
-            mysql: '{{column}} NOT LIKE BINARY {{value}}'
+            mysql:
+                default: '{{column}} NOT LIKE BINARY {{value}}'
+                dql: '{{column}} NOT LIKE DERAFU_MYSQL_BINARY_STRING({{value}})'
             sqlite: '{{column}} NOT LIKE {{value}}'
 
     'ilike:':
@@ -366,7 +370,7 @@ operators:
         examples: ['~John.*Doe', '~^hello', '~\b\d{3}\b']
         sql:
             pgsql: '{{column}} ~ {{value}}'
-            mysql: '{{column}} REGEXP BINARY {{value}}'
+            mysql: 'REGEXP_LIKE({{column}}, {{value}}, ''c'')'
 
     '~*':
         type: 'regexp'
@@ -376,7 +380,7 @@ operators:
         examples: ['~*John', '~*doe$', '~*hello|world']
         sql:
             pgsql: '{{column}} ~* {{value}}'
-            mysql: '{{column}} REGEXP {{value}}'
+            mysql: 'REGEXP_LIKE({{column}}, {{value}}, ''i'')'
 
     '!~':
         type: 'regexp'
@@ -386,7 +390,7 @@ operators:
         examples: ['!~John', '!~^hello', '!~\b\d{3}\b']
         sql:
             pgsql: '{{column}} !~ {{value}}'
-            mysql: '{{column}} NOT REGEXP BINARY {{value}}'
+            mysql: 'NOT REGEXP_LIKE({{column}}, {{value}}, ''c'')'
 
     '!~*':
         type: 'regexp'
@@ -396,7 +400,7 @@ operators:
         examples: ['!~*john', '!~*doe$', '!~*hello|world']
         sql:
             pgsql: '{{column}} !~* {{value}}'
-            mysql: '{{column}} NOT REGEXP {{value}}'
+            mysql: 'NOT REGEXP_LIKE({{column}}, {{value}}, ''i'')'
 
     # PostgreSQL SIMILAR TO operators.
     'similarto:':

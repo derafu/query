@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsQuery\Integration\Bridge\DoctrineORM;
 
 use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
+use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
 use Derafu\Query\Builder\Sql\SqlQuery;
 use Derafu\Query\Filter\CompositeCondition;
@@ -40,6 +41,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 
+#[UsesClass(AliasScope::class)]
 #[CoversClass(CompositeExpressionParser::class)]
 #[UsesClass(DoctrineORMQueryBuilderConditionApplier::class)]
 #[UsesClass(SqlBuilderWhere::class)]
@@ -81,12 +83,16 @@ class DoctrineORMQueryBuilderCompositeTest extends TestCase
 
         $pdo = $this->connection->getNativeConnection();
         assert($pdo instanceof PDO);
-        $pdo->exec(file_get_contents(
+        $sql = file_get_contents(
             __DIR__ . '/../../../../fixtures/integration/billing_schema.sql'
-        ));
-        $pdo->exec(file_get_contents(
+        );
+        $this->assertIsString($sql);
+        $pdo->exec($sql);
+        $sql = file_get_contents(
             __DIR__ . '/../../../../fixtures/integration/billing_data.sql'
-        ));
+        );
+        $this->assertIsString($sql);
+        $pdo->exec($sql);
 
         $pathParser = new PathParser();
         $loader = new OperatorLoader();
@@ -101,6 +107,10 @@ class DoctrineORMQueryBuilderCompositeTest extends TestCase
         $this->applier = new DoctrineORMQueryBuilderConditionApplier();
     }
 
+    /**
+     * @param array{sql:string,parameters:array<string,mixed>} $sql
+     * @param array{table?:class-string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{join:string,alias:string},leftJoin?:array{join:string,alias:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $query
+     */
     #[DataProvider('compositeQueryProvider')]
     public function testCompositeQueries(
         string $description,
@@ -117,6 +127,9 @@ class DoctrineORMQueryBuilderCompositeTest extends TestCase
         $this->assertSame($expected, $actual, $description);
     }
 
+    /**
+     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:class-string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{join:string,alias:string},leftJoin?:array{join:string,alias:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int}}>
+     */
     public static function compositeQueryProvider(): array
     {
         $cases = require __DIR__ . '/../../../../fixtures/integration/doctrine_orm.php';
@@ -133,13 +146,28 @@ class DoctrineORMQueryBuilderCompositeTest extends TestCase
         return $data;
     }
 
+    /**
+     * @param array<mixed> $results
+     * @return array<array<string|int,string|null>>
+     */
     private function normalizeResults(array $results): array
     {
         $normalized = array_map(
-            fn (array $row) => array_map(
-                fn ($v) => $v === null ? null : (string) $v,
-                $row
-            ),
+            function (mixed $row): array {
+                $this->assertIsArray($row);
+
+                return array_map(
+                    function (mixed $value): ?string {
+                        if ($value === null) {
+                            return null;
+                        }
+                        $this->assertIsScalar($value);
+
+                        return (string) $value;
+                    },
+                    $row
+                );
+            },
             $results
         );
 
@@ -148,6 +176,9 @@ class DoctrineORMQueryBuilderCompositeTest extends TestCase
         return $normalized;
     }
 
+    /**
+     * @param array{table?:class-string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{join:string,alias:string},leftJoin?:array{join:string,alias:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $config
+     */
     private function buildQueryFromConfig(array $config): DoctrineORMQueryBuilder
     {
         $qb = $this->em->createQueryBuilder();

@@ -12,11 +12,16 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Builder\Sql;
 
+use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Contract\QueryBuilderWhereInterface;
 use Derafu\Query\Builder\Contract\QueryInterface;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Contract\PathInterface;
+use Derafu\Query\Filter\SegmentOptionsTrait;
+use Derafu\Query\Operator\Contract\OperatorInterface;
+use Derafu\Support\ArrayReader;
+use Derafu\Support\ArrayType;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Derafu\Translation\Exception\Runtime\TranslatableUnderflowException as UnderflowException;
 
@@ -33,6 +38,12 @@ use Derafu\Translation\Exception\Runtime\TranslatableUnderflowException as Under
 final class SqlBuilderWhere implements QueryBuilderWhereInterface
 {
     use SqlSanitizerTrait;
+    use SegmentOptionsTrait;
+
+    /**
+     * @var non-empty-string
+     */
+    private readonly string $listDelimiter;
 
     /**
      * Create a new SQL Query Builder Where.
@@ -42,12 +53,19 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
      */
     public function __construct(
         private readonly string $engine = 'pgsql',
-        private readonly string $listDelimiter = ','
+        string $listDelimiter = ',',
+        private readonly bool $dql = false
     ) {
+        if ($listDelimiter === '') {
+            throw new InvalidArgumentException('List delimiter cannot be empty.');
+        }
+        $this->listDelimiter = $listDelimiter;
     }
 
     /**
      * {@inheritDoc}
+     *
+     * @return SqlQuery
      */
     public function build(
         ConditionInterface|CompositeConditionInterface $condition,
@@ -65,14 +83,14 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
      *
      * @param ConditionInterface $condition
      * @param string $parentAlias Alias or name of the driving table for EXISTS paths.
-     * @return QueryInterface The built where section of the query.
+     * @return SqlQuery The built where section of the query.
      */
     private function buildCondition(
         ConditionInterface $condition,
         string $parentAlias = ''
     ): QueryInterface {
         // EXISTS path: first segment carries subquery:exists.
-        if ($condition->getPath()->getFirstSegment()->getOption('subquery') === 'exists') {
+        if ($this->readSegmentOptions($condition->getPath()->getFirstSegment())->string('subquery') === 'exists') {
             return $this->buildExistsCondition($condition, $parentAlias);
         }
 
@@ -85,12 +103,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         $baseOperator = $operator->getBaseOperator();
 
         // Get SQL template for the engine.
-        $templates = $operator->get('sql') ?? $baseOperator?->get('sql');
-        if (is_string($templates)) {
-            $sql = $templates;
-        } else {
-            $sql = $templates[$this->engine] ?? null;
-        }
+        $sql = $this->readSqlTemplate($operator);
 
         if (empty($sql)) {
             throw new InvalidArgumentException([
@@ -121,8 +134,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
                 }
             }
 
-            // Normalize and cast value.
-            $value = $this->normalizeValue($value);
+            // Apply the operator's casting rules.
             $value = $this->castValue(
                 $value,
                 (array)($operator->getCastingRules() ?: $baseOperator?->getCastingRules())
@@ -142,7 +154,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
             if (str_contains($sql, '{{value}}')) {
                 $sql = str_replace(
                     '{{value}}',
-                    $this->sanitizeSqlIdentifier($value),
+                    $this->sanitizeSqlIdentifier(ArrayType::string()->parse($value, 'value')),
                     $sql
                 );
             }
@@ -163,7 +175,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
      *
      * @param CompositeConditionInterface $composite
      * @param string $parentAlias Alias or name of the driving table for EXISTS paths.
-     * @return QueryInterface The built where section of the query.
+     * @return SqlQuery The built where section of the query.
      */
     private function buildCompositeCondition(
         CompositeConditionInterface $composite,
@@ -186,43 +198,48 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
     }
 
     /**
-     * Normalizes a value ensuring it's a valid string for SQL.
-     *
-     * Handles:
-     *
-     *   - Boolean values to 1/0.
-     *   - Arrays to delimited lists.
-     *   - NULL values.
-     *
-     * @param mixed $value Raw value to normalize.
-     * @return string|null Normalized string value.
+     * Selects the engine template after validating its configuration.
      */
-    private function normalizeValue(mixed $value): ?string
+    private function readSqlTemplate(OperatorInterface $operator): ?string
     {
-        if (is_bool($value)) {
-            return (string)(int)$value;
+        $templates = $operator->get('sql') ?? $operator->getBaseOperator()?->get('sql');
+        if ($templates === null || is_string($templates)) {
+            return $templates;
         }
 
-        if (is_array($value)) {
-            return implode($this->listDelimiter, array_map(
-                fn ($v) => str_replace(
-                    $this->listDelimiter,
-                    '\\' . $this->listDelimiter,
-                    (string)$v
-                ),
-                $value
-            ));
+        $templates = ArrayType::array()->parse($templates, 'sql', $operator->getSymbol());
+        $validated = [];
+        foreach ($templates as $engine => $template) {
+            $path = ArrayType::path('sql', $engine);
+            $engine = ArrayType::string()->parse($engine, $path, $operator->getSymbol());
+            if (is_string($template)) {
+                $validated[$engine] = $template;
+                continue;
+            }
+
+            $variants = new ArrayReader(
+                ArrayType::array()->parse($template, $path, $operator->getSymbol()),
+                path: $path,
+                source: $operator->getSymbol()
+            );
+            $variants->onlyKeys('default', 'dql');
+            $default = $variants->require('default', ArrayType::string());
+            // Read explicitly present variants, including null, to reject invalid types.
+            $dql = array_key_exists('dql', $variants->toArray())
+                ? $variants->require('dql', ArrayType::string())
+                : null;
+            $validated[$engine] = $this->dql ? ($dql ?? $default) : $default;
         }
 
-        return $value;
+        return $validated[$this->engine] ?? null;
     }
 
     /**
      * Applies casting rules to a value.
      *
      * @param string|null $value The value to cast.
-     * @param array $rules The casting rules to apply.
-     * @return string|array|null The casted value.
+     * @param array<array-key,string> $rules The casting rules to apply.
+     * @return string|list<string>|null The casted value.
      */
     private function castValue(?string $value, array $rules): string|array|null
     {
@@ -231,6 +248,16 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         }
 
         foreach ($rules as $rule) {
+            if (!in_array($rule, ['like_start', 'like', 'like_end', 'list', 'date', 'month', 'year', 'period'], true)) {
+                continue;
+            }
+            if (is_array($value)) {
+                throw new InvalidArgumentException([
+                    'Casting rule "{rule}" requires a string, but a previous rule produced an array.',
+                    'rule' => $rule,
+                ]);
+            }
+
             switch ($rule) {
                 case 'like_start':
                     $value .= '%';
@@ -288,9 +315,9 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
     /**
      * Creates SQL parameters from a value.
      *
-     * @param string|array|null $value The value to parameterize.
+     * @param string|list<string>|null $value The value to parameterize.
      * @param string $column The column name for parameter prefixing.
-     * @return array The parameters array.
+     * @return array<string,string|null> The parameters array.
      */
     private function createParameters(string|array|null $value, string $column): array
     {
@@ -319,11 +346,15 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
      *
      * @param string $sql Base SQL template.
      * @param string $column The column name.
-     * @param array $parameters Query parameters.
-     * @return array{sql: string, parameters: array} The complete WHERE clause.
+     * @param array<string,mixed> $parameters Query parameters.
+     * @return array{sql: string, parameters: array<string,mixed>} The complete WHERE clause.
      */
-    private function createWhere(string $sql, string $column, array $parameters): array
-    {
+    private function createWhere(
+        string $sql,
+        string $column,
+        array $parameters,
+        bool $numericParameters = false
+    ): array {
         // Replace the column.
         $sql = str_replace('{{column}}', $column, $sql);
 
@@ -336,7 +367,9 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         }
 
         $parameterKeys = array_map(
-            fn ($key) => ':' . $key,
+            static fn (string $key): string => $numericParameters
+                ? 'CAST(:' . $key . ' AS NUMERIC)'
+                : ':' . $key,
             array_keys($parameters)
         );
 
@@ -400,6 +433,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
      *
      * @param ConditionInterface $condition The EXISTS condition.
      * @param string $parentAlias Alias or name of the outer driving table.
+     * @return SqlQuery
      */
     private function buildExistsCondition(
         ConditionInterface $condition,
@@ -415,7 +449,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         $existsSegments = [];
         $columnSegment  = null;
         foreach ($segments as $segment) {
-            if ($segment->getOption('subquery') === 'exists') {
+            if ($this->readSegmentOptions($segment)->string('subquery') === 'exists') {
                 $existsSegments[] = $segment;
             } else {
                 $columnSegment = $segment;
@@ -426,18 +460,28 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         $isNotExists  = ($effective->getSymbol() === 'is:empty');
         $existsPrefix = $isNotExists ? 'NOT EXISTS' : 'EXISTS';
 
-        // Primary EXISTS table (first entry segment).
-        $primary          = $existsSegments[0];
-        $primaryTable     = $this->sanitizeSqlSimpleIdentifier($primary->getName());
-        $primaryAlias     = $primary->getOption('alias');
-        $primaryAliasOrName = $primaryAlias ?? $primary->getName();
-        $subqueryFrom     = $primaryAlias !== null
-            ? $primaryTable . ' AS ' . $this->sanitizeSqlSimpleIdentifier($primaryAlias)
-            : $primaryTable;
+        // Reserve all explicit aliases first, then resolve each local name once.
+        $scope = new AliasScope([$parentAlias]);
+        foreach ($existsSegments as $segment) {
+            $explicitAlias = $this->readSegmentOptions($segment)->string('alias');
+            if ($explicitAlias !== null) {
+                $scope->reserve($this->sanitizeSqlSimpleIdentifier($explicitAlias));
+            }
+        }
+        $aliases = [];
+        foreach ($existsSegments as $segment) {
+            $explicitAlias = $this->readSegmentOptions($segment)->string('alias');
+            $aliases[] = $explicitAlias !== null
+                ? $this->sanitizeSqlSimpleIdentifier($explicitAlias)
+                : $scope->generate();
+        }
+        $primary = $existsSegments[0];
+        $primaryAliasOrName = $aliases[0];
+        $subqueryFrom = $this->sanitizeSqlSimpleIdentifier($primary->getName()) . ' AS ' . $primaryAliasOrName;
 
         // Correlation condition: parentAlias.col = primaryTable.col (from on: option).
         $whereParts = [];
-        foreach ($primary->getOption('on', []) as $parentCol => $childCol) {
+        foreach ($this->readSegmentJoinConditions($primary) ?? [] as $parentCol => $childCol) {
             $whereParts[] = sprintf(
                 '%s.%s = %s.%s',
                 $this->sanitizeSqlSimpleIdentifier($parentAlias),
@@ -455,14 +499,11 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         for ($i = 1; $i < count($existsSegments); $i++) {
             $seg           = $existsSegments[$i];
             $segTable      = $this->sanitizeSqlSimpleIdentifier($seg->getName());
-            $segAlias      = $seg->getOption('alias');
-            $segAliasOrName = $segAlias ?? $seg->getName();
-            $segRef        = $segAlias !== null
-                ? $segTable . ' AS ' . $this->sanitizeSqlSimpleIdentifier($segAlias)
-                : $segTable;
+            $segAliasOrName = $aliases[$i];
+            $segRef = $segTable . ' AS ' . $segAliasOrName;
 
             $joinParts = [];
-            foreach ($seg->getOption('on', []) as $prevCol => $segCol) {
+            foreach ($this->readSegmentJoinConditions($seg) ?? [] as $prevCol => $segCol) {
                 $joinParts[] = sprintf(
                     '%s.%s = %s.%s',
                     $this->sanitizeSqlSimpleIdentifier($prevAliasOrName),
@@ -488,8 +529,9 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         ) {
             return $this->buildAggregateSubquery(
                 $condition,
-                $parentAlias,
-                $primary,
+                $subqueryFrom . $joins,
+                $whereParts,
+                $lastExistsAlias,
                 strtoupper($m[1]),
                 trim($m[2])
             );
@@ -499,15 +541,14 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         $parameters = [];
 
         if ($columnSegment !== null) {
-            $templates   = $operator->get('sql') ?? $baseOp?->get('sql');
-            $filterSql   = is_string($templates) ? $templates : ($templates[$this->engine] ?? null);
+            $filterSql = $this->readSqlTemplate($operator);
 
             if (!empty($filterSql)) {
                 $qualifiedColumn = $this->sanitizeSqlIdentifier(
                     $lastExistsAlias . '.' . $columnSegment->getName()
                 );
 
-                $value = $this->normalizeValue($filter->getValue());
+                $value = $filter->getValue();
                 $value = $this->castValue(
                     $value,
                     (array)($operator->getCastingRules() ?: $baseOp?->getCastingRules())
@@ -534,15 +575,18 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
      * Produces: (SELECT AGG(alias.col) FROM table alias WHERE correlation) op :param
      *
      * @param ConditionInterface $condition The aggregate condition.
-     * @param string $parentAlias Alias or name of the driving table (outer query).
-     * @param object $primary The first EXISTS segment (table + options).
+     * @param string $subqueryFrom Resolved FROM and JOIN clauses.
+     * @param list<string> $whereParts Resolved correlations.
+     * @param string $subAlias Resolved alias of the final EXISTS segment.
      * @param string $funcName Whitelisted aggregate function name (SUM, AVG, etc.).
      * @param string $funcArg Raw argument from path (e.g. "amount" or "*").
+     * @return SqlQuery
      */
     private function buildAggregateSubquery(
         ConditionInterface $condition,
-        string $parentAlias,
-        object $primary,
+        string $subqueryFrom,
+        array $whereParts,
+        string $subAlias,
         string $funcName,
         string $funcArg
     ): QueryInterface {
@@ -550,23 +594,6 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         $operator  = $filter->getOperator();
         $baseOp    = $operator->getBaseOperator();
         $effective = $baseOp ?? $operator;
-
-        $primaryTable = $this->sanitizeSqlSimpleIdentifier($primary->getName());
-        $subAlias     = $primary->getOption('alias') ?? strtolower($primary->getName()[0]);
-
-        $subqueryFrom = $primaryTable . ' ' . $this->sanitizeSqlSimpleIdentifier($subAlias);
-
-        // Rebuild correlation using the resolved subAlias (explicit alias may differ from auto).
-        $whereParts = [];
-        foreach ($primary->getOption('on', []) as $parentCol => $childCol) {
-            $whereParts[] = sprintf(
-                '%s.%s = %s.%s',
-                $this->sanitizeSqlSimpleIdentifier($parentAlias),
-                $this->sanitizeSqlSimpleIdentifier($parentCol),
-                $this->sanitizeSqlSimpleIdentifier($subAlias),
-                $this->sanitizeSqlSimpleIdentifier($childCol)
-            );
-        }
 
         // COUNT(*) = 0 / > 0 → rewrite to NOT EXISTS / EXISTS (avoids full aggregate scan).
         if ($funcArg === '*') {
@@ -595,8 +622,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         $subquery .= ')';
 
         // Get comparison operator SQL template.
-        $templates = $operator->get('sql') ?? $baseOp?->get('sql');
-        $filterSql = is_string($templates) ? $templates : ($templates[$this->engine] ?? null);
+        $filterSql = $this->readSqlTemplate($operator);
 
         if (empty($filterSql)) {
             throw new InvalidArgumentException([
@@ -607,14 +633,20 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         }
 
         // Create parameters from the filter value.
-        $value      = $this->normalizeValue($filter->getValue());
+        $value      = $filter->getValue();
         $value      = $this->castValue(
             $value,
             (array)($operator->getCastingRules() ?: $baseOp?->getCastingRules())
         );
         $parameters = $this->createParameters($value, $funcName);
 
-        return new SqlQuery(...$this->createWhere($filterSql, $subquery, $parameters));
+        // PostgreSQL otherwise infers integer parameters from COUNT or SUM of
+        // integers, rejecting decimal thresholds even though the comparison is valid.
+        $numericParameters = $this->engine === 'pgsql'
+            && in_array($funcName, ['COUNT', 'SUM', 'AVG'], true)
+            && in_array($effective->getType(), ['standard', 'list', 'range'], true);
+
+        return new SqlQuery(...$this->createWhere($filterSql, $subquery, $parameters, $numericParameters));
     }
 
     /**
@@ -623,11 +655,13 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
      * Returns the SQL prefix ('EXISTS' or 'NOT EXISTS') when the operator and
      * value form a pure existence check, or null when the condition is not
      * rewritable (e.g. COUNT(*) > 5 must remain a scalar aggregate subquery).
+     *
+     * @param OperatorInterface $effective
      */
-    private function resolveCountStarToExistsPrefix(object $effective, mixed $value): ?string
+    private function resolveCountStarToExistsPrefix(object $effective, ?string $value): ?string
     {
         $symbol = $effective->getSymbol();
-        $v      = trim((string)($value ?? ''));
+        $v      = trim($value ?? '');
 
         return match (true) {
             $symbol === 'is:empty'                   => 'NOT EXISTS',
@@ -651,8 +685,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
     private function buildColumnFromPath(PathInterface $path): string
     {
         $segments = $path->getSegments();
-        $lastSegment = end($segments);
-        $column = $lastSegment->getName();
+        $column = $path->getLastSegment()->getName();
 
         // Check if the column is a function (has parentheses).
         $isFunction = preg_match('/^([A-Za-z0-9_]+)\s*\((.*)\)$/', $column, $matches);
@@ -667,7 +700,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
             if (count($segments) > 1) {
                 $parentIndex = count($segments) - 2;
                 $parent = $segments[$parentIndex];
-                $tablePrefix = $parent->getOption('alias') ?? $parent->getName();
+                $tablePrefix = $this->readSegmentOptions($parent)->string('alias') ?? $parent->getName();
 
                 // Split the arguments, respecting parentheses and quotes.
                 $args = $this->splitFunctionArguments($functionArgs);
@@ -700,70 +733,11 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         if (count($segments) > 1) {
             $parentIndex = count($segments) - 2;
             $parent = $segments[$parentIndex];
-            $tablePrefix = $parent->getOption('alias') ?? $parent->getName();
+            $tablePrefix = $this->readSegmentOptions($parent)->string('alias') ?? $parent->getName();
             return $this->sanitizeSqlIdentifier($tablePrefix . '.' . $column);
         }
 
         return $this->sanitizeSqlIdentifier($column);
-    }
-
-    /**
-     * Splits function arguments respecting nested parentheses and quotes.
-     *
-     * @param string $argsString The function arguments as a string.
-     * @return array<string> The separated arguments.
-     */
-    private function splitFunctionArguments(string $argsString): array
-    {
-        if (empty($argsString)) {
-            return [];
-        }
-
-        $args = [];
-        $current = '';
-        $parenCount = 0;
-        $inQuote = false;
-        $quoteChar = '';
-
-        for ($i = 0; $i < strlen($argsString); $i++) {
-            $char = $argsString[$i];
-
-            // Handle quotes.
-            if (($char === "'" || $char === '"') && ($i === 0 || $argsString[$i - 1] !== '\\')) {
-                if (!$inQuote) {
-                    $inQuote = true;
-                    $quoteChar = $char;
-                } elseif ($char === $quoteChar) {
-                    $inQuote = false;
-                }
-            }
-
-            // Handle parentheses.
-            if (!$inQuote) {
-                if ($char === '(') {
-                    $parenCount++;
-                } elseif ($char === ')') {
-                    $parenCount--;
-                }
-            }
-
-            // If we find a comma outside of quotes and parentheses, separate
-            // the argument.
-            if ($char === ',' && !$inQuote && $parenCount === 0) {
-                $args[] = $current;
-                $current = '';
-                continue;
-            }
-
-            $current .= $char;
-        }
-
-        // Add the last argument.
-        if (!empty($current)) {
-            $args[] = $current;
-        }
-
-        return $args;
     }
 
     /**

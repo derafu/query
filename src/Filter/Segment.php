@@ -24,7 +24,7 @@ final class Segment implements SegmentInterface
      * Creates a new segment instance.
      *
      * @param string $name The segment name.
-     * @param array<string,string|array<string,string>> $options
+     * @param array<array-key,string|array<array-key,string>|null> $options
      */
     public function __construct(
         private readonly string $name,

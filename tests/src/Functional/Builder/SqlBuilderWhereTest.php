@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Functional\Builder;
 
+use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
 use Derafu\Query\Builder\Sql\SqlQuery;
 use Derafu\Query\Filter\Condition;
@@ -27,8 +28,10 @@ use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 
+#[UsesClass(AliasScope::class)]
 #[CoversClass(SqlBuilderWhere::class)]
 #[CoversClass(SqlQuery::class)]
 #[CoversClass(Filter::class)]
@@ -55,6 +58,9 @@ class SqlBuilderWhereTest extends TestCase
         $this->filterParser = new FilterParser($manager);
     }
 
+    /**
+     * @param array{sql:string,parameters:array<string,mixed>} $expected
+     */
     #[DataProvider('queryCasesProvider')]
     public function testBuildQuery(
         string $pathExpression,
@@ -81,6 +87,9 @@ class SqlBuilderWhereTest extends TestCase
         $this->assertSame($expected, $result);
     }
 
+    /**
+     * @return array<string,array{pathExpression:string,filterExpression:string,expected:array{sql:string,parameters:array<string,mixed>},engine:string}>
+     */
     public static function queryCasesProvider(): array
     {
         $cases = require __DIR__ . '/../../../fixtures/functional/queries_sql_where.php';
@@ -98,6 +107,10 @@ class SqlBuilderWhereTest extends TestCase
         return $testCases;
     }
 
+    /**
+     * @param array{sql:string,parameters:array<string,mixed>} $queryData
+     * @return array{sql:string,parameters:array<string,mixed>}
+     */
     private function normalizeQueryForComparison(array $queryData): array
     {
         // Pattern to match any param_ followed by anything until a space or quote.
@@ -105,9 +118,15 @@ class SqlBuilderWhereTest extends TestCase
 
         // Replace actual unique IDs with predictable placeholder.
         $sql = preg_replace($pattern, 'param_{id}', $queryData['sql']);
+        $this->assertIsString($sql);
         $parameters = array_combine(
             array_map(
-                fn ($key) => preg_replace($pattern, 'param_{id}', $key),
+                function (string $key) use ($pattern): string {
+                    $normalized = preg_replace($pattern, 'param_{id}', $key);
+                    $this->assertIsString($normalized);
+
+                    return $normalized;
+                },
                 array_keys($queryData['parameters'])
             ),
             array_values($queryData['parameters'])

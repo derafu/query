@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 return [
     // Configuration.
+    'Query configuration root keys must be strings.' =>
+        'Las claves de la raíz de la configuración de la consulta deben ser strings.',
     'Query configuration cannot be empty.' =>
         'La configuración de la consulta no puede estar vacía.',
     'Unsupported file extension: {extension}' =>
@@ -28,6 +30,9 @@ return [
         'Formato de configuración YAML inválido.',
     'Error parsing YAML file: {error}' =>
         'Error al interpretar el archivo YAML: {error}',
+
+    'Alias "{alias}" is already used in this query scope.' =>
+        'El alias "{alias}" ya está utilizado en este ámbito de la consulta.',
 
     // Filters and paths.
     'No valid operator found in expression: {expression}' =>
@@ -54,6 +59,13 @@ return [
         'La clave y el valor de la opción no pueden estar vacíos.',
     'Option parts around equals sign cannot be empty.' =>
         'Las partes de la opción alrededor del signo igual no pueden estar vacías.',
+
+    'Option "{option}" cannot mix scalar and mapping values.' =>
+        'La opción "{option}" no puede mezclar valores simples y correspondencias.',
+    'Column "{column}" is defined more than once in option "{option}".' =>
+        'La columna "{column}" está definida más de una vez en la opción "{option}".',
+    'Option "{option}" is defined more than once.' =>
+        'La opción "{option}" está definida más de una vez.',
 
     // Operators.
     'Operator already registered: {symbol}.' =>
@@ -82,6 +94,20 @@ return [
         'El operador "{symbol}" no está soportado en el contexto DQL{reason}.',
 
     // SQL builders.
+    'A correlated DQL subquery requires a root entity in the FROM clause.' =>
+        'Una subconsulta DQL correlacionada requiere una entidad raíz en la cláusula FROM.',
+    'Unexpected Doctrine DBAL QueryBuilder state for "{part}".' =>
+        'Estado inesperado del QueryBuilder de Doctrine DBAL para "{part}".',
+    'Unexpected Doctrine ORM QueryBuilder join state.' =>
+        'Estado inesperado de los joins del QueryBuilder de Doctrine ORM.',
+    'Failed to sanitize SQL identifier: {error}' =>
+        'No se pudo sanitizar el identificador SQL: {error}',
+    'Failed to substitute aggregate DQL subquery: {error}' =>
+        'No se pudo sustituir la subconsulta DQL agregada: {error}',
+    'List delimiter cannot be empty.' =>
+        'El delimitador de listas no puede estar vacío.',
+    'Casting rule "{rule}" requires a string, but a previous rule produced an array.' =>
+        'La regla de conversión "{rule}" requiere un string, pero una regla anterior produjo un arreglo.',
     'No SQL template for operator {operator} on engine {engine}.' =>
         'No hay plantilla SQL para el operador {operator} en el motor {engine}.',
     'Invalid value format for operator {operator}: {value}.' =>
@@ -102,6 +128,8 @@ return [
         'No se especificó una tabla para la consulta.',
 
     // Engines.
+    'PDO returned an unexpected driver name type: {type}.' =>
+        'PDO devolvió un tipo inesperado para el nombre del driver: {type}.',
     'Unsupported database platform' =>
         'Plataforma de base de datos no soportada',
     'Doctrine DBAL native connection is not a PDO instance.' =>

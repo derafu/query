@@ -56,7 +56,17 @@ class JsonConfigLoader implements ConfigLoaderInterface
                     'Invalid JSON configuration format.'
                 );
             }
-            return $config;
+            $validated = [];
+            foreach ($config as $key => $value) {
+                if (!is_string($key)) {
+                    throw new InvalidArgumentException(
+                        'Query configuration root keys must be strings.'
+                    );
+                }
+                $validated[$key] = $value;
+            }
+
+            return $validated;
         } catch (JsonException $e) {
             throw new InvalidArgumentException(
                 ['Error parsing JSON: {error}', 'error' => $e->getMessage()],

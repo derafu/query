@@ -42,7 +42,7 @@ interface OperatorLoaderInterface
      * Converts a PHP array structure into operators. Useful for programmatic
      * configuration and testing.
      *
-     * @param array $operators Raw configuration array of operators.
+     * @param array<array-key,mixed> $operators Raw configuration array of operators.
      * @return array<string,OperatorInterface> Map of symbols to operators.
      * @throws RuntimeException If configuration format is invalid.
      */

@@ -46,7 +46,7 @@ interface QueryBuilderInterface
     /**
      * Creates a new SELECT query.
      *
-     * @param string|array $columns Columns to select or null for all.
+     * @param string|array<string> $columns Columns to select or null for all.
      * @return self For method chaining.
      */
     public function select(string|array $columns): self;
@@ -65,7 +65,7 @@ interface QueryBuilderInterface
      *
      * Replaces any existing base conditions.
      *
-     * @param string|array|ConditionInterface|CompositeConditionInterface $condition
+     * @param string|array<mixed>|ConditionInterface|CompositeConditionInterface $condition
      * The condition expression(s).
      * @return self For method chaining.
      */
@@ -76,7 +76,7 @@ interface QueryBuilderInterface
     /**
      * Adds an AND WHERE condition.
      *
-     * @param string|array|ConditionInterface|CompositeConditionInterface $condition
+     * @param string|array<mixed>|ConditionInterface|CompositeConditionInterface $condition
      * The condition expression(s).
      * @return self For method chaining.
      */
@@ -90,7 +90,7 @@ interface QueryBuilderInterface
      * If condition is an array of conditions will generate an AND group of
      * conditions joines with OR to the existing WHERE conditions.
      *
-     * @param string|array|ConditionInterface|CompositeConditionInterface $condition
+     * @param string|array<mixed>|ConditionInterface|CompositeConditionInterface $condition
      * The condition expression(s).
      * @return self For method chaining.
      */
@@ -106,7 +106,7 @@ interface QueryBuilderInterface
      * then joins that entire group to the existing WHERE conditions using AND.
      * For example: "existing_condition AND (condition1 OR condition2 OR condition3)"
      *
-     * @param array|ConditionInterface|CompositeConditionInterface $conditions
+     * @param array<mixed>|ConditionInterface|CompositeConditionInterface $conditions
      * The conditions to add to the OR group.
      * @return self For method chaining.
      */
@@ -133,7 +133,7 @@ interface QueryBuilderInterface
     /**
      * Sets the order by clause for the query.
      *
-     * @param string|array $columns Column(s) to order by.
+     * @param string|array<string> $columns Column(s) to order by.
      * @param string $direction Direction (ASC or DESC). Only used when $columns is a string.
      * @return self For method chaining.
      */
@@ -142,7 +142,7 @@ interface QueryBuilderInterface
     /**
      * Adds a group by clause to the query.
      *
-     * @param string|array $columns Column(s) to group by.
+     * @param string|array<string> $columns Column(s) to group by.
      * @return self For method chaining.
      */
     public function groupBy(string|array $columns): self;
@@ -150,7 +150,7 @@ interface QueryBuilderInterface
     /**
      * Adds a HAVING clause to filter grouped results.
      *
-     * @param string|array|ConditionInterface|CompositeConditionInterface $condition The condition for HAVING.
+     * @param string|array<mixed>|ConditionInterface|CompositeConditionInterface $condition The condition for HAVING.
      * @return self For method chaining.
      */
     public function having(

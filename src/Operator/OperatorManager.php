@@ -14,6 +14,7 @@ namespace Derafu\Query\Operator;
 
 use Derafu\Query\Operator\Contract\OperatorInterface;
 use Derafu\Query\Operator\Contract\OperatorManagerInterface;
+use Derafu\Support\ArrayType;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 
 /**
@@ -59,7 +60,7 @@ final class OperatorManager implements OperatorManagerInterface
         }
 
         // Check if this operator uses another operator.
-        $use = $operator->get('alias');
+        $use = ArrayType::string()->nullable()->parse($operator->get('alias'), 'alias', $symbol);
         if ($use !== null && !isset($this->operators[$use])) {
             throw new InvalidArgumentException(
                 [

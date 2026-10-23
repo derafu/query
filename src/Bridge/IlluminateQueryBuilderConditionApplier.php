@@ -13,8 +13,10 @@ declare(strict_types=1);
 namespace Derafu\Query\Bridge;
 
 use Derafu\Query\Bridge\Contract\QueryBuilderConditionApplierInterface;
+use Derafu\Query\Bridge\Illuminate\CompiledCondition;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
+use Illuminate\Contracts\Database\Query\Expression;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -51,7 +53,8 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
             $this->getFromAliasOrTable($qb)
         );
 
-        $qb->whereRaw($sql, $params);
+        $qb->where(new CompiledCondition($sql));
+        $qb->addBinding($params, 'where');
     }
 
     /**
@@ -68,7 +71,8 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
             $condition
         );
 
-        $qb->havingRaw($sql, $params);
+        $qb->having(new CompiledCondition($sql));
+        $qb->addBinding($params, 'having');
     }
 
     /**
@@ -112,7 +116,7 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
     ): void {
         $paths = $this->extractPaths($condition);
 
-        $currentFrom = (string)$qb->from;
+        $currentFrom = $this->readFrom($qb);
         $fromTable = strtolower(trim(preg_replace('/\s+as\s+\S+$/i', '', $currentFrom) ?? ''));
 
         if (empty($fromTable)) {
@@ -147,12 +151,11 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
      * Returns the alias (if any) or raw table name from the FROM clause,
      * lower-cased. Used as parentAlias in EXISTS correlation conditions.
      *
-     * Illuminate stores FROM as a plain string like "invoices" or
-     * "invoices as i", so we extract the alias when present.
+     * Resolves expression values through the grammar before extracting an alias.
      */
     private function getFromAliasOrTable(QueryBuilder $qb): string
     {
-        $from = (string)$qb->from;
+        $from = $this->readFrom($qb);
 
         if ($from === '') {
             return '';
@@ -163,6 +166,19 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
         }
 
         return strtolower($from);
+    }
+
+    /**
+     * Resolves the FROM text using Illuminate's expression contract.
+     */
+    private function readFrom(QueryBuilder $qb): string
+    {
+        $from = $qb->from;
+        if ($from instanceof Expression) {
+            return (string) $from->getValue($qb->getGrammar());
+        }
+
+        return (string) $from;
     }
 
     /**

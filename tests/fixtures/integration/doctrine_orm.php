@@ -641,7 +641,7 @@ return [
         'invoices_sum_payments_gte' => [
             'description' => 'Invoices where sum of payments >= 1200',
             'sql' => [
-                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE (SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id = i.id) >= :value',
+                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE (SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id = i.id) >= CAST(:value AS NUMERIC)',
                 'parameters' => ['value' => '1200'],
             ],
             'query' => [
@@ -655,7 +655,7 @@ return [
         'invoices_count_payments_gt' => [
             'description' => 'Invoices with more than one payment',
             'sql' => [
-                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE (SELECT COUNT(*) FROM payments p WHERE p.invoice_id = i.id) > :value',
+                'sql' => 'SELECT i.id AS id, i.number AS number, i.status AS status FROM invoices i WHERE (SELECT COUNT(*) FROM payments p WHERE p.invoice_id = i.id) > CAST(:value AS NUMERIC)',
                 'parameters' => ['value' => '1'],
             ],
             'query' => [
@@ -669,7 +669,7 @@ return [
         'customers_avg_invoice_total_lt' => [
             'description' => 'Customers whose average invoice total is less than 1000',
             'sql' => [
-                'sql' => 'SELECT c.id AS id, c.name AS name FROM customers c WHERE (SELECT AVG(i.total) FROM invoices i WHERE i.customer_id = c.id) < :value',
+                'sql' => 'SELECT c.id AS id, c.name AS name FROM customers c WHERE (SELECT AVG(i.total) FROM invoices i WHERE i.customer_id = c.id) < CAST(:value AS NUMERIC)',
                 'parameters' => ['value' => '1000'],
             ],
             'query' => [

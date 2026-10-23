@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsQuery\Integration\Bridge;
 
 use Derafu\Query\Bridge\DoctrineDBALQueryBuilderConditionApplier;
+use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
 use Derafu\Query\Builder\Sql\SqlQuery;
 use Derafu\Query\Filter\CompositeCondition;
@@ -37,6 +38,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
 use PHPUnit\Framework\TestCase;
 
+#[UsesClass(AliasScope::class)]
 #[CoversClass(CompositeExpressionParser::class)]
 #[UsesClass(DoctrineDBALQueryBuilderConditionApplier::class)]
 #[UsesClass(SqlBuilderWhere::class)]
@@ -69,12 +71,16 @@ class DoctrineDBALQueryBuilderCompositeTest extends TestCase
 
         $pdo = $this->connection->getNativeConnection();
         assert($pdo instanceof PDO);
-        $pdo->exec(file_get_contents(
+        $sql = file_get_contents(
             __DIR__ . '/../../../fixtures/integration/billing_schema.sql'
-        ));
-        $pdo->exec(file_get_contents(
+        );
+        $this->assertIsString($sql);
+        $pdo->exec($sql);
+        $sql = file_get_contents(
             __DIR__ . '/../../../fixtures/integration/billing_data.sql'
-        ));
+        );
+        $this->assertIsString($sql);
+        $pdo->exec($sql);
 
         $pathParser = new PathParser();
         $loader = new OperatorLoader();
@@ -89,6 +95,10 @@ class DoctrineDBALQueryBuilderCompositeTest extends TestCase
         $this->applier = new DoctrineDBALQueryBuilderConditionApplier();
     }
 
+    /**
+     * @param array{sql:string,parameters:array<string,mixed>} $sql
+     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $query
+     */
     #[DataProvider('compositeQueryProvider')]
     public function testCompositeQueries(
         string $description,
@@ -103,6 +113,9 @@ class DoctrineDBALQueryBuilderCompositeTest extends TestCase
         $this->assertSame($expected, $actual, $description);
     }
 
+    /**
+     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int}}>
+     */
     public static function compositeQueryProvider(): array
     {
         $cases = require __DIR__ . '/../../../fixtures/integration/queries_integration.php';
@@ -119,6 +132,9 @@ class DoctrineDBALQueryBuilderCompositeTest extends TestCase
         return $data;
     }
 
+    /**
+     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $config
+     */
     private function buildQueryFromConfig(array $config): DoctrineDBALQueryBuilder
     {
         $qb = $this->connection->createQueryBuilder();
