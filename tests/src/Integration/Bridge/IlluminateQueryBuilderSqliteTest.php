@@ -215,6 +215,30 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
         $this->assertSame([], $qb->get()->all());
     }
 
+    public function testCompiledConditionPreservesQuotedIdentifiersAndLiterals(): void
+    {
+        $sql = <<<'SQL'
+SELECT ":value" AS quoted_identifier, `:value` AS backtick_identifier,
+       ':value' AS literal_value, :value AS bound_value
+FROM (SELECT 'identifier' AS ":value")
+/* :value */
+-- :value
+SQL;
+        $compiled = new CompiledCondition($sql, ['value' => 'bound']);
+        $this->assertSame(['bound'], $compiled->getBindings());
+        $rows = $this->connection->select(
+            $compiled->getValue($this->connection->getQueryGrammar()),
+            $compiled->getBindings()
+        );
+        $this->assertCount(1, $rows);
+        $this->assertSame([
+            'quoted_identifier' => 'identifier',
+            'backtick_identifier' => 'identifier',
+            'literal_value' => ':value',
+            'bound_value' => 'bound',
+        ], (array) $rows[0]);
+    }
+
     /**
      * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:string,alias?:string,select?:literal-string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:literal-string,alias?:string},leftJoin?:array{table:string,condition:literal-string,alias?:string},rightJoin?:array{table:string,condition:literal-string,alias?:string},groupBy?:literal-string|list<literal-string>,orderBy?:array<literal-string,literal-string>,limit?:int,offset?:int}}>
      */

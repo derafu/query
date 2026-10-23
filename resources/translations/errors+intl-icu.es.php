@@ -11,6 +11,8 @@ declare(strict_types=1);
  */
 
 return [
+    'Failed to compile Illuminate parameter placeholders: {error}' =>
+        'No se pudieron compilar los marcadores de parámetros de Illuminate: {error}',
     // Configuration.
     'Query configuration root keys must be strings.' =>
         'Las claves de la raíz de la configuración de la consulta deben ser strings.',

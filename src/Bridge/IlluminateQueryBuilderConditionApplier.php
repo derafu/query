@@ -26,7 +26,7 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  *
  * Accepts both Illuminate\Database\Query\Builder and
  * Illuminate\Database\Eloquent\Builder — Eloquent builders are resolved
- * to their underlying Query\Builder via toBase() automatically.
+ * to their underlying Query\Builder via getQuery() automatically.
  *
  * Handles WHERE clause generation, FROM inference from path segments,
  * and JOIN application (with deduplication). Uses SqlBuilderWhere
@@ -53,8 +53,9 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
             $this->getFromAliasOrTable($qb)
         );
 
-        $qb->where(new CompiledCondition($sql));
-        $qb->addBinding($params, 'where');
+        $compiled = new CompiledCondition($sql, $params);
+        $qb->where($compiled);
+        $qb->addBinding($compiled->getBindings(), 'where');
     }
 
     /**
@@ -71,8 +72,9 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
             $condition
         );
 
-        $qb->having(new CompiledCondition($sql));
-        $qb->addBinding($params, 'having');
+        $compiled = new CompiledCondition($sql, $params);
+        $qb->having($compiled);
+        $qb->addBinding($compiled->getBindings(), 'having');
     }
 
     /**
@@ -91,14 +93,14 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
     /**
      * Resolves both Query\Builder and Eloquent\Builder to Query\Builder.
      *
-     * For Eloquent builders, toBase() applies pending scopes and returns
-     * the shared underlying Query\Builder instance, so mutations made here
-     * are reflected in the original Eloquent builder.
+     * getQuery() returns the original underlying builder so conditions remain
+     * attached to the consumer's query. Eloquent applies pending scopes when
+     * executing it; toBase() would instead apply them to a clone.
      */
     private function resolveBuilder(object $queryBuilder): QueryBuilder
     {
         if ($queryBuilder instanceof EloquentBuilder) {
-            return $queryBuilder->toBase();
+            return $queryBuilder->getQuery();
         }
 
         assert($queryBuilder instanceof QueryBuilder);

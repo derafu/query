@@ -15,6 +15,8 @@ namespace Derafu\TestsQuery\Integration\Database;
 use Derafu\Query\Bridge\DoctrineDBALQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\Exception\UnsupportedOperatorException;
+use Derafu\Query\Bridge\Illuminate\CompiledCondition;
+use Derafu\Query\Bridge\IlluminateQueryBuilderConditionApplier;
 use Derafu\Query\Builder\SqlQueryBuilder;
 use Derafu\Query\Config\JsonConfigLoader;
 use Derafu\Query\Config\QueryConfig;
@@ -27,6 +29,7 @@ use Derafu\Query\Filter\FilterParser;
 use Derafu\Query\Filter\PathParser;
 use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
+use Derafu\TestsQuery\Fixture\Models\IlluminateRecord;
 use Derafu\TestsQuery\Fixture\RealDatabaseContainer;
 use Derafu\TestsQuery\Integration\Bridge\DoctrineORM\ArrayCachePool;
 use Derafu\TestsQuery\Integration\Bridge\DoctrineORM\DoctrineORMAssociationSubqueryTest;
@@ -45,9 +48,19 @@ use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\Mapping\Driver\AttributeDriver;
 use Doctrine\ORM\ORMSetup;
 use Doctrine\ORM\Tools\SchemaTool;
+use Illuminate\Database\Connection as IlluminateConnection;
+use Illuminate\Database\ConnectionResolver;
+use Illuminate\Database\ConnectionResolverInterface;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\MySqlConnection;
+use Illuminate\Database\PostgresConnection;
+use Illuminate\Database\Query\Builder as IlluminateBuilder;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+
+require_once __DIR__ . '/../../../fixtures/models/IlluminateRecord.php';
 
 /** Real-server scenarios shared by PostgreSQL and MySQL, without mocks. */
 abstract class AbstractRealDatabaseQueryTestCase extends TestCase
@@ -59,6 +72,12 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
     private EntityManager $em;
 
     private ExpressionParser $parser;
+
+    private ?IlluminateConnection $illuminate = null;
+
+    private ?ConnectionResolverInterface $previousEloquentResolver = null;
+
+    private bool $eloquentResolverInstalled = false;
 
     protected function setUp(): void
     {
@@ -83,6 +102,14 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
 
     protected function tearDown(): void
     {
+        if ($this->eloquentResolverInstalled) {
+            if ($this->previousEloquentResolver === null) {
+                Model::unsetConnectionResolver();
+            } else {
+                Model::setConnectionResolver($this->previousEloquentResolver);
+            }
+        }
+        $this->illuminate?->disconnect();
         if (isset($this->em)) {
             $this->em->close();
         }
@@ -99,7 +126,43 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
     }
 
     /**
-     * @param 'pdo'|'doctrine'|'dbal'|'orm' $adapter
+     * Uses the same real PDO connection and database as the other adapters.
+     */
+    private function illuminateConnection(): IlluminateConnection
+    {
+        if ($this->illuminate !== null) {
+            return $this->illuminate;
+        }
+        $pdo = $this->connection->getNativeConnection();
+        $this->assertInstanceOf(PDO::class, $pdo);
+        $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $this->assertContains($driver, ['mysql', 'pgsql']);
+        $database = $this->connection->getDatabase() ?? '';
+        $this->illuminate = $driver === 'mysql'
+            ? new MySqlConnection($pdo, $database, '', ['driver' => 'mysql'])
+            : new PostgresConnection($pdo, $database, '', ['driver' => 'pgsql']);
+        return $this->illuminate;
+    }
+
+    /** @return IlluminateBuilder|EloquentBuilder<IlluminateRecord> */
+    private function createIlluminateBuilder(string $table, bool $eloquent): IlluminateBuilder|EloquentBuilder
+    {
+        $connection = $this->illuminateConnection();
+        if (!$eloquent) {
+            return $connection->table($table);
+        }
+        if (!$this->eloquentResolverInstalled) {
+            $this->previousEloquentResolver = Model::getConnectionResolver();
+            $resolver = new ConnectionResolver(['query-tests' => $connection]);
+            $resolver->setDefaultConnection('query-tests');
+            Model::setConnectionResolver($resolver);
+            $this->eloquentResolverInstalled = true;
+        }
+        return (new IlluminateRecord())->setConnection('query-tests')->setTable($table)->newQuery();
+    }
+
+    /**
+     * @param 'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent' $adapter
      * @param class-string $entity
      * @return array<array-key, mixed>
      */
@@ -120,6 +183,19 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
             (new DoctrineORMQueryBuilderConditionApplier())->apply($qb, $condition);
             return $qb->getQuery()->getSingleColumnResult();
         }
+        if ($adapter === 'illuminate' || $adapter === 'eloquent') {
+            $qb = $this->createIlluminateBuilder($table, $adapter === 'eloquent')
+                ->from($table . ' as p')->select('p.' . $field)
+                ->distinct($distinct)->orderBy('p.' . $field);
+            if ($offset > 0) {
+                $qb->offset($offset);
+            }
+            if ($limit !== null) {
+                $qb->limit($limit);
+            }
+            (new IlluminateQueryBuilderConditionApplier())->apply($qb, $condition);
+            return $qb->pluck('p.' . $field)->all();
+        }
         if ($adapter === 'dbal') {
             $qb = $this->connection->createQueryBuilder()->select('p.' . $field)->from($table, 'p')
                 ->distinct($distinct)->orderBy('p.' . $field)->setFirstResult($offset)->setMaxResults($limit);
@@ -131,14 +207,17 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
         $this->assertInstanceOf(PDO::class, $pdo);
         $engine = $adapter === 'pdo' ? new PdoEngine($pdo) : new DoctrineEngine($this->connection);
         $qb = (new SqlQueryBuilder($engine, $this->parser))->from($table, 'p')->select(['p.' . $field])
-            ->where($condition)->distinct($distinct)->orderBy('p.' . $field)->offset($offset);
+            ->where($condition)->distinct($distinct)->orderBy('p.' . $field);
+        if ($offset > 0) {
+            $qb->offset($offset);
+        }
         if ($limit !== null) {
             $qb->limit($limit);
         }
         return array_map(static fn (array $row): mixed => array_values($row)[0], $qb->execute());
     }
 
-    /** @return iterable<string, array{'pdo'|'doctrine'|'dbal'|'orm', string, list<int>}> */
+    /** @return iterable<string, array{'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent', string, list<int>}> */
     public static function commonFilters(): iterable
     {
         $cases = [
@@ -160,14 +239,14 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
             'grouped or' => ['(id?=1||id?=3)&&price?>1', [1, 3]],
             'explicit alias' => ['p__code?=00123', [1]],
         ];
-        foreach (['pdo', 'doctrine', 'dbal', 'orm'] as $adapter) {
+        foreach (['pdo', 'doctrine', 'dbal', 'orm', 'illuminate', 'eloquent'] as $adapter) {
             foreach ($cases as $name => [$expression, $expected]) {
                 yield $adapter . ' ' . $name => [$adapter, $expression, $expected];
             }
         }
     }
 
-    /** @param 'pdo'|'doctrine'|'dbal'|'orm' $adapter
+    /** @param 'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent' $adapter
      * @param list<int> $expected
      */
     #[DataProvider('commonFilters')]
@@ -176,22 +255,22 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
         $this->assertSame($expected, $this->executeFilter($adapter, $expression));
     }
 
-    /** @return iterable<string, array{'pdo'|'doctrine'|'dbal'|'orm'}> */
+    /** @return iterable<string, array{'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent'}> */
     public static function adapters(): iterable
     {
-        foreach (['pdo', 'doctrine', 'dbal', 'orm'] as $adapter) {
+        foreach (['pdo', 'doctrine', 'dbal', 'orm', 'illuminate', 'eloquent'] as $adapter) {
             yield $adapter => [$adapter];
         }
     }
 
-    /** @param 'pdo'|'doctrine'|'dbal'|'orm' $adapter */
+    /** @param 'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent' $adapter */
     #[DataProvider('adapters')]
     public function testOrderingAndPaginationReturnTheRequestedPage(string $adapter): void
     {
         $this->assertSame([2, 3], $this->executeFilter($adapter, 'id?isnot:null', offset: 1, limit: 2));
     }
 
-    /** @param 'pdo'|'doctrine'|'dbal'|'orm' $adapter */
+    /** @param 'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent' $adapter */
     #[DataProvider('adapters')]
     public function testJoinsUseTheAliasAndDistinctRemovesDuplicateRootRows(string $adapter): void
     {
@@ -200,7 +279,7 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
         $this->assertSame([1, 2, 3], $this->executeFilter($adapter, $expression, distinct: true));
     }
 
-    /** @return iterable<string, array{'pdo'|'doctrine'|'dbal'|'orm', string, list<int>}> */
+    /** @return iterable<string, array{'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent', string, list<int>}> */
     public static function invoiceSubqueries(): iterable
     {
         $cases = [
@@ -214,14 +293,14 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
             'minimum' => ['___payments[on:id=invoice_id]__MIN(amount)?=10', [11]],
             'maximum' => ['___payments[on:id=invoice_id]__MAX(amount)?=100.25', [10]],
         ];
-        foreach (['pdo', 'doctrine', 'dbal', 'orm'] as $adapter) {
+        foreach (['pdo', 'doctrine', 'dbal', 'orm', 'illuminate', 'eloquent'] as $adapter) {
             foreach ($cases as $name => [$expression, $expected]) {
                 yield $adapter . ' ' . $name => [$adapter, $expression, $expected];
             }
         }
     }
 
-    /** @param 'pdo'|'doctrine'|'dbal'|'orm' $adapter
+    /** @param 'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent' $adapter
      * @param list<int> $expected
      */
     #[DataProvider('invoiceSubqueries')]
@@ -230,7 +309,7 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
         $this->assertSame($expected, $this->executeFilter($adapter, $expression, 'invoices', Invoice::class));
     }
 
-    /** @param 'pdo'|'doctrine'|'dbal'|'orm' $adapter */
+    /** @param 'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent' $adapter */
     #[DataProvider('adapters')]
     public function testNestedExistsKeepsTheCustomerCorrelation(string $adapter): void
     {
@@ -256,16 +335,16 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
         $this->assertSame($expected, $this->executeFilter('orm', $expression, entity: $entity, field: $field));
     }
 
-    /** @return iterable<string, array{'pdo'|'doctrine'|'dbal', string, list<int>}> */
+    /** @return iterable<string, array{'pdo'|'doctrine'|'dbal'|'illuminate'|'eloquent', string, list<int>}> */
     public static function sqlRegexOperators(): iterable
     {
-        foreach (['pdo', 'doctrine', 'dbal'] as $adapter) {
+        foreach (['pdo', 'doctrine', 'dbal', 'illuminate', 'eloquent'] as $adapter) {
             yield $adapter . ' sensitive' => [$adapter, 'name?~^Lap', [1]];
             yield $adapter . ' insensitive' => [$adapter, 'name?~*^lap', [1]];
         }
     }
 
-    /** @param 'pdo'|'doctrine'|'dbal' $adapter
+    /** @param 'pdo'|'doctrine'|'dbal'|'illuminate'|'eloquent' $adapter
      * @param list<int> $expected
      */
     #[DataProvider('sqlRegexOperators')]
@@ -304,7 +383,7 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
         $this->assertSame([['id' => 1], ['id' => 2]], $builder->execute());
     }
 
-    /** @param 'pdo'|'doctrine'|'dbal'|'orm' $adapter */
+    /** @param 'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent' $adapter */
     #[DataProvider('adapters')]
     public function testDecimalAggregateThresholdsKeepTheirMeaning(string $adapter): void
     {
@@ -327,7 +406,7 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
         }
     }
 
-    /** @param 'pdo'|'doctrine'|'dbal'|'orm' $adapter */
+    /** @param 'pdo'|'doctrine'|'dbal'|'orm'|'illuminate'|'eloquent' $adapter */
     #[DataProvider('adapters')]
     public function testLikePatternsAndInheritedOperatorsExecuteConsistently(string $adapter): void
     {
@@ -366,7 +445,7 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
         $this->assertSame(['computing'], $qb->getQuery()->getSingleColumnResult());
     }
 
-    /** @param 'pdo'|'doctrine'|'dbal' $adapter */
+    /** @param 'pdo'|'doctrine'|'dbal'|'illuminate'|'eloquent' $adapter */
     #[DataProvider('sqlAdapters')]
     public function testRegexSensitivityNegationAliasesAndNulls(string $adapter): void
     {
@@ -388,11 +467,87 @@ abstract class AbstractRealDatabaseQueryTestCase extends TestCase
         }
     }
 
-    /** @return iterable<string, array{'pdo'|'doctrine'|'dbal'}> */
+    /** @return iterable<string, array{'pdo'|'doctrine'|'dbal'|'illuminate'|'eloquent'}> */
     public static function sqlAdapters(): iterable
     {
-        foreach (['pdo', 'doctrine', 'dbal'] as $adapter) {
+        foreach (['pdo', 'doctrine', 'dbal', 'illuminate', 'eloquent'] as $adapter) {
             yield $adapter => [$adapter];
         }
+    }
+
+    /** @return iterable<string, array{bool}> */
+    public static function illuminateBuilders(): iterable
+    {
+        yield 'query builder' => [false];
+        yield 'eloquent' => [true];
+    }
+
+    #[DataProvider('illuminateBuilders')]
+    public function testIlluminateWhereHavingAndFromBindingsRemainSeparate(bool $eloquent): void
+    {
+        $qb = $this->createIlluminateBuilder('products', $eloquent)
+            ->fromRaw('(SELECT * FROM products WHERE price >= ?) as p', ['5'])
+            ->select('p.category')->where('p.id', '>', 0)->groupBy('p.category')
+            ->havingRaw('COUNT(*) >= ?', [1])->orderBy('p.category');
+        $applier = new IlluminateQueryBuilderConditionApplier();
+        $applier->apply($qb, $this->parser->parse('p__price?>=20.50'));
+        $applier->applyHaving($qb, $this->parser->parse('p__category?like:comp%'));
+
+        $bindings = $qb->getRawBindings();
+        $this->assertSame(['5'], $bindings['from']);
+        $this->assertSame([0, '20.50'], $bindings['where']);
+        $this->assertSame([1, 'comp%'], $bindings['having']);
+        $this->assertSame(['5', 0, '20.50', 1, 'comp%'], $qb->getBindings());
+        $this->assertSame(['computing'], $qb->pluck('p.category')->all());
+    }
+
+    public function testEloquentGlobalScopeIsAppliedAlongsideTheFilter(): void
+    {
+        $qb = $this->createIlluminateBuilder('products', true);
+        $this->assertInstanceOf(EloquentBuilder::class, $qb);
+        $qb->from('products as p')->select('p.id')->orderBy('p.id');
+        $qb->withGlobalScope('visible', static function (EloquentBuilder $builder): void {
+            $builder->where('p.id', '>', 1);
+        });
+        (new IlluminateQueryBuilderConditionApplier())->apply($qb, $this->parser->parse('category?=computing'));
+        $this->assertSame([2], $qb->pluck('p.id')->all());
+    }
+
+    public function testIlluminateRepeatedParametersFollowSqlOrder(): void
+    {
+        $connection = $this->illuminateConnection();
+        $sql = <<<'SQL'
+SELECT :second AS second_result, :first AS first_result, :second AS repeated_value,
+       :nullable AS nullable_value, ':first' AS literal_value /* :second */
+-- :first
+SQL;
+        $value = "value with ? and :first and 'quotes'";
+        $compiled = new CompiledCondition($sql, [
+            'first' => 'first',
+            'second' => $value,
+            'nullable' => null,
+        ]);
+        $this->assertSame([$value, 'first', $value, null], $compiled->getBindings());
+        $rows = $connection->select($compiled->getValue($connection->getQueryGrammar()), $compiled->getBindings());
+        $this->assertCount(1, $rows);
+        $this->assertSame([
+            'second_result' => $value,
+            'first_result' => 'first',
+            'repeated_value' => $value,
+            'nullable_value' => null,
+            'literal_value' => ':first',
+        ], (array) $rows[0]);
+    }
+
+    public function testEloquentGlobalScopeIsPreservedWhenApplyingHaving(): void
+    {
+        $qb = $this->createIlluminateBuilder('products', true);
+        $this->assertInstanceOf(EloquentBuilder::class, $qb);
+        $qb->from('products as p')->select('p.category')->groupBy('p.category');
+        $qb->withGlobalScope('visible', static function (EloquentBuilder $builder): void {
+            $builder->where('p.id', '>', 1);
+        });
+        (new IlluminateQueryBuilderConditionApplier())->applyHaving($qb, $this->parser->parse('p__category?like:comp%'));
+        $this->assertSame(['computing'], $qb->pluck('p.category')->all());
     }
 }

@@ -16,6 +16,8 @@ use Derafu\Query\Bridge\DoctrineDBALQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\DoctrineORM\NumericComparisonType;
 use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\Exception\UnsupportedOperatorException;
+use Derafu\Query\Bridge\Illuminate\CompiledCondition;
+use Derafu\Query\Bridge\IlluminateQueryBuilderConditionApplier;
 use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
 use Derafu\Query\Builder\Sql\SqlQuery;
@@ -42,6 +44,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\UsesClass;
 
 #[UsesClass(AliasScope::class)]
+#[CoversClass(CompiledCondition::class)]
+#[CoversClass(IlluminateQueryBuilderConditionApplier::class)]
 #[CoversClass(DoctrineDBALQueryBuilderConditionApplier::class)]
 #[CoversClass(NumericComparisonType::class)]
 #[CoversClass(DoctrineORMQueryBuilderConditionApplier::class)]
