@@ -207,7 +207,7 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
             return ['sql' => $sql, 'parameters' => $parameters, 'types' => $types];
         }
 
-        if ($this->readSegmentOptions($condition->getPath()->getFirstSegment())->string('subquery') === 'exists') {
+        if ($this->readSegmentOptions($condition->getPath()->getFirstSegment())->getString('subquery') === 'exists') {
             return $this->buildExistsDql($qb, $condition, $rootAlias, $aliasScope);
         }
 
@@ -241,7 +241,7 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
         $existsSegments = [];
         $columnSegment  = null;
         foreach ($segments as $segment) {
-            if ($this->readSegmentOptions($segment)->string('subquery') === 'exists') {
+            if ($this->readSegmentOptions($segment)->getString('subquery') === 'exists') {
                 $existsSegments[] = $segment;
             } else {
                 $columnSegment = $segment;
@@ -463,7 +463,7 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
         // before allocating any helper alias in any of its subqueries.
         foreach ($this->extractPaths($condition) as $path) {
             foreach ($path->getSegments() as $segment) {
-                $explicit = $this->readSegmentOptions($segment)->string('alias');
+                $explicit = $this->readSegmentOptions($segment)->getString('alias');
                 if ($explicit !== null) {
                     $reserved[] = $this->sanitizeSqlSimpleIdentifier($explicit);
                 }
@@ -481,7 +481,7 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
     {
         $scope = new AliasScope($qb->getAllAliases());
         foreach ($segments as $segment) {
-            $explicit = $this->readSegmentOptions($segment)->string('alias');
+            $explicit = $this->readSegmentOptions($segment)->getString('alias');
             if ($explicit !== null) {
                 $scope->reserve($this->sanitizeSqlSimpleIdentifier($explicit));
             }
@@ -489,7 +489,7 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
         $source = $allocator->generate();
         $targets = [];
         foreach ($segments as $segment) {
-            $explicit = $this->readSegmentOptions($segment)->string('alias');
+            $explicit = $this->readSegmentOptions($segment)->getString('alias');
             $targets[] = $explicit !== null ? $this->sanitizeSqlSimpleIdentifier($explicit) : $allocator->generate();
         }
 
@@ -626,7 +626,7 @@ final class DoctrineORMQueryBuilderConditionApplier implements QueryBuilderCondi
         foreach ($this->extractPaths($condition) as $path) {
             // EXISTS paths build their complete association traversal inside
             // the correlated subquery, not in the outer query's JOIN scope.
-            if ($this->readSegmentOptions($path->getFirstSegment())->string('subquery') !== 'exists') {
+            if ($this->readSegmentOptions($path->getFirstSegment())->getString('subquery') !== 'exists') {
                 $paths[] = $path;
             }
         }

@@ -12,11 +12,11 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Operator;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Operator\Contract\OperatorLoaderInterface;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
 use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Derafu\Value\ValueType;
 use Exception;
 use Symfony\Component\Yaml\Yaml;
 
@@ -59,7 +59,7 @@ final class OperatorLoader implements OperatorLoaderInterface
             );
         }
 
-        return $this->loadFromArray(ArrayType::array()->parse($content, 'configuration', $path));
+        return $this->loadFromArray(ValueType::array()->parse($content, 'configuration', $path));
     }
 
     /**
@@ -76,22 +76,22 @@ final class OperatorLoader implements OperatorLoaderInterface
         }
 
         $reader = new ArrayReader($config);
-        $types = $reader->require('types', ArrayType::array());
-        $definitions = $reader->require('operators', ArrayType::array());
+        $types = $reader->require('types', ValueType::array());
+        $definitions = $reader->require('operators', ValueType::array());
 
         $operators = [];
         foreach ($definitions as $symbol => $operatorConfig) {
-            $symbol = ArrayType::string()->parse($symbol, 'operators.symbol');
-            $operatorConfig = ArrayType::array()->parse($operatorConfig, 'operators.' . $symbol);
+            $symbol = ValueType::string()->parse($symbol, 'operators.symbol');
+            $operatorConfig = ValueType::array()->parse($operatorConfig, 'operators.' . $symbol);
             $operatorReader = new ArrayReader($operatorConfig, $symbol);
-            $type = $operatorReader->string('type');
+            $type = $operatorReader->getString('type');
             if ($type && !isset($types[$type])) {
                 throw new RuntimeException(
                     ['Undefined operator type: {type}.', 'type' => (string) $type]
                 );
             }
 
-            $use = $operatorReader->string('alias');
+            $use = $operatorReader->getString('alias');
             if ($use !== null) {
                 if (!isset($operators[$use])) {
                     throw new InvalidArgumentException(
@@ -160,7 +160,7 @@ final class OperatorLoader implements OperatorLoaderInterface
                 }
             }
 
-            ArrayType::string()->nullable()->parse($operator->get('alias'), 'alias', $symbol);
+            ValueType::string()->nullable()->parse($operator->get('alias'), 'alias', $symbol);
             $operator->getValidationPattern();
             $operator->getCastingRules();
         }

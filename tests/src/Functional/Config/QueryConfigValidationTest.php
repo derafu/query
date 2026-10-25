@@ -148,6 +148,54 @@ final class QueryConfigValidationTest extends TestCase
         new QueryConfig($data);
     }
 
+    /** @return iterable<string, array{string}> */
+    public static function joinKinds(): iterable
+    {
+        foreach (['innerJoin', 'leftJoin', 'rightJoin', 'crossJoin'] as $key) {
+            yield $key => [$key];
+        }
+    }
+
+    #[DataProvider('joinKinds')]
+    public function testJoinRecordsRejectNumericKeys(string $key): void
+    {
+        $this->expectException(TranslatableInvalidArgumentException::class);
+        $this->expectExceptionMessage('The key "' . $key . '" must be of type map, array given.');
+
+        new QueryConfig([
+            'table' => 'products',
+            $key => [
+                'table' => 'stock',
+                'condition' => 'products.id = stock.product_id',
+                7 => 'unexpected',
+            ],
+        ]);
+    }
+
+    public function testStringKeyedJoinMetadataIsPreservedWithoutAffectingExecution(): void
+    {
+        $data = [
+            'table' => 'products',
+            'alias' => 'p',
+            'select' => ['p.id', 's.quantity'],
+            'innerJoin' => [
+                'table' => 'stock',
+                'condition' => 'p.id = s.product_id',
+                'alias' => 's',
+                'extension' => [7 => 'custom', 2 => null],
+                'vendor.flag' => false,
+            ],
+            'orderBy' => 'p.id',
+        ];
+        $config = new QueryConfig($data);
+
+        $this->assertSame($data, $config->getConfig());
+        $this->assertSame([
+            ['id' => 1, 'quantity' => 3],
+            ['id' => 2, 'quantity' => 0],
+        ], $config->applyTo($this->builder())->execute());
+    }
+
     /**
      * @return array<string,array{string|array<string>,string|array<string>,string|array<string>}>
      */

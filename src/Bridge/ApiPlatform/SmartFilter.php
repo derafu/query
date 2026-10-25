@@ -19,7 +19,7 @@ use ApiPlatform\Metadata\Parameter;
 use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\Exception\UnsupportedOperatorException;
 use Derafu\Query\Filter\Contract\CompositeExpressionParserInterface;
-use Derafu\Support\ArrayType;
+use Derafu\Value\ValueType;
 use Doctrine\ORM\QueryBuilder;
 use Throwable;
 
@@ -71,7 +71,7 @@ final class SmartFilter implements FilterInterface
             return;
         }
         if (!$parameter instanceof Parameter) {
-            throw ArrayType::mismatch('parameter', Parameter::class, $parameter);
+            throw ValueType::mismatch('parameter', Parameter::class, $parameter);
         }
         $property = $parameter->getProperty();
         $value = $parameter->getValue();

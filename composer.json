@@ -28,7 +28,8 @@
         "php": "^8.5",
         "symfony/yaml": "^8.0",
         "derafu/translation": "dev-main",
-        "derafu/support": "dev-main"
+        "derafu/array": "dev-main",
+        "derafu/value": "dev-main"
     },
     "require-dev": {
         "ext-xdebug": "*",

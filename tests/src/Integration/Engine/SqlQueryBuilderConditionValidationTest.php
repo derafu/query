@@ -97,7 +97,7 @@ final class SqlQueryBuilderConditionValidationTest extends TestCase
     public function testRejectsInvalidArrayElements(string $route, mixed $value): void
     {
         $this->expectException(TranslatableInvalidArgumentException::class);
-        $this->expectExceptionMessage('The key "condition" must be of type');
+        $this->expectExceptionMessage('The value at "condition" must be of type');
 
         match ($route) {
             'where' => $this->builder->where([$value]),

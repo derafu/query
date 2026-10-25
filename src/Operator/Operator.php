@@ -12,9 +12,9 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Operator;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Operator\Contract\OperatorInterface;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
+use Derafu\Value\ValueType;
 
 /**
  * Represents a query operator.
@@ -54,7 +54,7 @@ final class Operator implements OperatorInterface
      */
     public function getType(): string
     {
-        return $this->reader->require('type', ArrayType::string());
+        return $this->reader->require('type', ValueType::string());
     }
 
     /**
@@ -62,7 +62,7 @@ final class Operator implements OperatorInterface
      */
     public function getName(): string
     {
-        return $this->reader->require('name', ArrayType::string());
+        return $this->reader->require('name', ValueType::string());
     }
 
     /**
@@ -70,7 +70,7 @@ final class Operator implements OperatorInterface
      */
     public function getDescription(): string
     {
-        return $this->reader->require('description', ArrayType::string());
+        return $this->reader->require('description', ValueType::string());
     }
 
     /**
@@ -78,7 +78,7 @@ final class Operator implements OperatorInterface
      */
     public function getValidationPattern(): ?string
     {
-        if (($pattern = $this->reader->string('pattern')) !== null) {
+        if (($pattern = $this->reader->getString('pattern')) !== null) {
             return $pattern;
         }
 
@@ -94,17 +94,8 @@ final class Operator implements OperatorInterface
      */
     public function getCastingRules(): array
     {
-        $rules = $this->reader->array('cast') ?? [];
-        $validated = [];
-        foreach ($rules as $key => $rule) {
-            $validated[$key] = ArrayType::string()->parse(
-                $rule,
-                ArrayType::path('cast', $key),
-                $this->symbol
-            );
-        }
-
-        return $validated;
+        $rules = $this->reader->getArray('cast') ?? [];
+        return ValueType::arrayOf(ValueType::string())->parse($rules, 'cast', $this->symbol);
     }
 
     /**

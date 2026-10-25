@@ -12,13 +12,13 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Config;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Builder\Contract\QueryBuilderInterface;
 use Derafu\Query\Config\Contract\QueryConfigInterface;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Derafu\Value\ValueType;
 
 /**
  * Query configuration.
@@ -44,7 +44,7 @@ class QueryConfig implements QueryConfigInterface
      */
     public function __construct(array $config)
     {
-        $this->reader = ArrayReader::from($config);
+        $this->reader = ArrayReader::fromArray($config);
         $this->validateConfiguration($config);
         $this->config = $config;
     }
@@ -136,8 +136,8 @@ class QueryConfig implements QueryConfigInterface
     public function applyTo(QueryBuilderInterface $builder): QueryBuilderInterface
     {
         // The table is optional: it can also be inferred from condition paths.
-        if (($table = $this->reader->string('table')) !== null) {
-            $alias = $this->reader->string('alias');
+        if (($table = $this->reader->getString('table')) !== null) {
+            $alias = $this->reader->getString('alias');
             $builder = $alias !== null
                 ? $builder->table($table, $alias)
                 : $builder->table($table);
@@ -147,7 +147,7 @@ class QueryConfig implements QueryConfigInterface
             $builder->select($columns);
         }
 
-        if ($this->reader->bool('distinct') === true) {
+        if ($this->reader->getBool('distinct') === true) {
             $builder->distinct();
         }
 
@@ -164,31 +164,31 @@ class QueryConfig implements QueryConfigInterface
             $builder->andWhereOr($condition);
         }
 
-        if (($join = $this->reader->reader('innerJoin')) !== null) {
+        if (($join = $this->reader->getReader('innerJoin', ValueType::map())) !== null) {
             $builder->innerJoin(
-                $join->require('table', ArrayType::string()),
-                $join->require('condition', ArrayType::string()),
-                $join->string('alias')
+                $join->require('table', ValueType::string()),
+                $join->require('condition', ValueType::string()),
+                $join->getString('alias')
             );
         }
-        if (($join = $this->reader->reader('leftJoin')) !== null) {
+        if (($join = $this->reader->getReader('leftJoin', ValueType::map())) !== null) {
             $builder->leftJoin(
-                $join->require('table', ArrayType::string()),
-                $join->require('condition', ArrayType::string()),
-                $join->string('alias')
+                $join->require('table', ValueType::string()),
+                $join->require('condition', ValueType::string()),
+                $join->getString('alias')
             );
         }
-        if (($join = $this->reader->reader('rightJoin')) !== null) {
+        if (($join = $this->reader->getReader('rightJoin', ValueType::map())) !== null) {
             $builder->rightJoin(
-                $join->require('table', ArrayType::string()),
-                $join->require('condition', ArrayType::string()),
-                $join->string('alias')
+                $join->require('table', ValueType::string()),
+                $join->require('condition', ValueType::string()),
+                $join->getString('alias')
             );
         }
-        if (($join = $this->reader->reader('crossJoin')) !== null) {
+        if (($join = $this->reader->getReader('crossJoin', ValueType::map())) !== null) {
             $builder->crossJoin(
-                $join->require('table', ArrayType::string()),
-                $join->string('alias')
+                $join->require('table', ValueType::string()),
+                $join->getString('alias')
             );
         }
 
@@ -201,10 +201,10 @@ class QueryConfig implements QueryConfigInterface
         if (($columns = $this->readColumns('orderBy')) !== null) {
             $builder->orderBy($columns);
         }
-        if (($limit = $this->reader->int('limit')) !== null) {
+        if (($limit = $this->reader->getInt('limit')) !== null) {
             $builder->limit($limit);
         }
-        if (($offset = $this->reader->int('offset')) !== null) {
+        if (($offset = $this->reader->getInt('offset')) !== null) {
             $builder->offset($offset);
         }
 
@@ -227,11 +227,11 @@ class QueryConfig implements QueryConfigInterface
             );
         }
 
-        $this->reader->string('table');
-        $this->reader->string('alias');
-        $this->reader->bool('distinct');
-        $this->reader->int('limit');
-        $this->reader->int('offset');
+        $this->reader->getString('table');
+        $this->reader->getString('alias');
+        $this->reader->getBool('distinct');
+        $this->reader->getInt('limit');
+        $this->reader->getInt('offset');
 
         foreach (['select', 'groupBy', 'orderBy'] as $key) {
             $this->readColumns($key);
@@ -242,15 +242,15 @@ class QueryConfig implements QueryConfigInterface
         $this->readConditionGroup('andWhereOr');
 
         foreach (['innerJoin', 'leftJoin', 'rightJoin', 'crossJoin'] as $key) {
-            $join = $this->reader->reader($key);
+            $join = $this->reader->getReader($key, ValueType::map());
             if ($join === null) {
                 continue;
             }
-            $join->require('table', ArrayType::string());
+            $join->require('table', ValueType::string());
             if ($key !== 'crossJoin') {
-                $join->require('condition', ArrayType::string());
+                $join->require('condition', ValueType::string());
             }
-            $join->string('alias');
+            $join->getString('alias');
         }
     }
 
@@ -261,7 +261,7 @@ class QueryConfig implements QueryConfigInterface
     {
         return $this->reader->get(
             $key,
-            new ArrayType('string|array<string>', self::parseColumns(...))
+            new ValueType('string|array<string>', self::parseColumns(...))
         );
     }
 
@@ -276,18 +276,10 @@ class QueryConfig implements QueryConfigInterface
             return $value;
         }
         if (!is_array($value)) {
-            throw ArrayType::mismatch($path, 'string|array<string>', $value);
+            throw ValueType::mismatch($path, 'string|array<string>', $value);
         }
 
-        $columns = [];
-        foreach ($value as $key => $column) {
-            $columns[$key] = ArrayType::string()->parse(
-                $column,
-                ArrayType::path($path, $key)
-            );
-        }
-
-        return $columns;
+        return ValueType::arrayOf(ValueType::string())->parse($value, $path);
     }
 
     /**
@@ -298,7 +290,7 @@ class QueryConfig implements QueryConfigInterface
     ): string|array|ConditionInterface|CompositeConditionInterface|null {
         return $this->reader->get(
             $key,
-            new ArrayType(
+            new ValueType(
                 'string|array|ConditionInterface|CompositeConditionInterface',
                 self::parseCondition(...)
             )
@@ -315,7 +307,7 @@ class QueryConfig implements QueryConfigInterface
     ): array|ConditionInterface|CompositeConditionInterface|null {
         $condition = $this->readCondition($key);
         if (is_string($condition)) {
-            throw ArrayType::mismatch(
+            throw ValueType::mismatch(
                 $key,
                 'array|ConditionInterface|CompositeConditionInterface',
                 $condition
@@ -342,7 +334,7 @@ class QueryConfig implements QueryConfigInterface
             return $value;
         }
         if (!is_array($value)) {
-            throw ArrayType::mismatch(
+            throw ValueType::mismatch(
                 $path,
                 'string|array|ConditionInterface|CompositeConditionInterface',
                 $value
@@ -353,7 +345,7 @@ class QueryConfig implements QueryConfigInterface
         foreach ($value as $key => $condition) {
             $conditions[$key] = self::parseCondition(
                 $condition,
-                ArrayType::path($path, $key)
+                ValueType::path($path, $key)
             );
         }
 

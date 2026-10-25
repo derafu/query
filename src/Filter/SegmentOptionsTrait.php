@@ -12,9 +12,9 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Filter;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Filter\Contract\SegmentInterface;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
+use Derafu\Value\ValueType;
 
 /**
  * Reads segment options at their point of use, leaving unknown options intact.
@@ -35,7 +35,7 @@ trait SegmentOptionsTrait
     {
         return $this->readSegmentOptions($segment)->get(
             'on',
-            new ArrayType('array<string,string>', self::parseSegmentJoinConditions(...))
+            new ValueType('array<string,string>', self::parseSegmentJoinConditions(...))
         );
     }
 
@@ -46,12 +46,12 @@ trait SegmentOptionsTrait
      */
     private static function parseSegmentJoinConditions(mixed $value, string $path): array
     {
-        $conditions = ArrayType::array()->parse($value, $path);
+        $conditions = ValueType::array()->parse($value, $path);
         $result = [];
         foreach ($conditions as $source => $target) {
-            $columnPath = ArrayType::path($path, $source);
-            $source = ArrayType::string()->parse($source, $columnPath);
-            $result[$source] = ArrayType::string()->parse($target, $columnPath);
+            $columnPath = ValueType::path($path, $source);
+            $source = ValueType::string()->parse($source, $columnPath);
+            $result[$source] = ValueType::string()->parse($target, $columnPath);
         }
 
         return $result;

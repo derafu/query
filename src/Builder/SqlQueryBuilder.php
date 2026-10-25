@@ -24,9 +24,9 @@ use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Contract\ExpressionParserInterface;
 use Derafu\Query\Filter\Contract\PathInterface;
 use Derafu\Query\Filter\SegmentOptionsTrait;
-use Derafu\Support\ArrayType;
 use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
+use Derafu\Value\ValueType;
 
 /**
  * SQL implementation of the query builder.
@@ -641,7 +641,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
             return $condition;
         }
 
-        throw ArrayType::mismatch(
+        throw ValueType::mismatch(
             'condition',
             'string|array|ConditionInterface|CompositeConditionInterface',
             $condition
@@ -671,7 +671,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
 
                 $this->from(
                     $firstSegment->getName(),
-                    $this->readSegmentOptions($firstSegment)->string('alias')
+                    $this->readSegmentOptions($firstSegment)->getString('alias')
                 );
             }
         }
@@ -724,7 +724,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         // The first segment should be the base table.
         $baseSegment = $segments[0];
         $baseTable = $baseSegment->getName();
-        $baseAlias = $this->readSegmentOptions($baseSegment)->string('alias');
+        $baseAlias = $this->readSegmentOptions($baseSegment)->getString('alias');
 
         // Check that it matches the current table.
         // If the base table of the path does not match the one in the query, it
@@ -741,10 +741,10 @@ final class SqlQueryBuilder implements QueryBuilderInterface
         for ($i = 1; $i < count($segments) - 1; $i++) {
             $segment = $segments[$i];
             $targetTable = $segment->getName();
-            $targetAlias = $this->readSegmentOptions($segment)->string('alias');
+            $targetAlias = $this->readSegmentOptions($segment)->getString('alias');
 
             // Determine join type.
-            $joinType = strtoupper($this->readSegmentOptions($segment)->string('join') ?? 'INNER');
+            $joinType = strtoupper($this->readSegmentOptions($segment)->getString('join') ?? 'INNER');
 
             // Check join conditions.
             $joinConditions = $this->readSegmentJoinConditions($segment);

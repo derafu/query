@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\Query\Builder\Sql;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Contract\QueryBuilderWhereInterface;
 use Derafu\Query\Builder\Contract\QueryInterface;
@@ -20,10 +21,9 @@ use Derafu\Query\Filter\Contract\ConditionInterface;
 use Derafu\Query\Filter\Contract\PathInterface;
 use Derafu\Query\Filter\SegmentOptionsTrait;
 use Derafu\Query\Operator\Contract\OperatorInterface;
-use Derafu\Support\ArrayReader;
-use Derafu\Support\ArrayType;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException as InvalidArgumentException;
 use Derafu\Translation\Exception\Runtime\TranslatableUnderflowException as UnderflowException;
+use Derafu\Value\ValueType;
 
 /**
  * SQL query builder implementation.
@@ -90,7 +90,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         string $parentAlias = ''
     ): QueryInterface {
         // EXISTS path: first segment carries subquery:exists.
-        if ($this->readSegmentOptions($condition->getPath()->getFirstSegment())->string('subquery') === 'exists') {
+        if ($this->readSegmentOptions($condition->getPath()->getFirstSegment())->getString('subquery') === 'exists') {
             return $this->buildExistsCondition($condition, $parentAlias);
         }
 
@@ -154,7 +154,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
             if (str_contains($sql, '{{value}}')) {
                 $sql = str_replace(
                     '{{value}}',
-                    $this->sanitizeSqlIdentifier(ArrayType::string()->parse($value, 'value')),
+                    $this->sanitizeSqlIdentifier(ValueType::string()->parse($value, 'value')),
                     $sql
                 );
             }
@@ -207,26 +207,26 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
             return $templates;
         }
 
-        $templates = ArrayType::array()->parse($templates, 'sql', $operator->getSymbol());
+        $templates = ValueType::array()->parse($templates, 'sql', $operator->getSymbol());
         $validated = [];
         foreach ($templates as $engine => $template) {
-            $path = ArrayType::path('sql', $engine);
-            $engine = ArrayType::string()->parse($engine, $path, $operator->getSymbol());
+            $path = ValueType::path('sql', $engine);
+            $engine = ValueType::string()->parse($engine, $path, $operator->getSymbol());
             if (is_string($template)) {
                 $validated[$engine] = $template;
                 continue;
             }
 
             $variants = new ArrayReader(
-                ArrayType::array()->parse($template, $path, $operator->getSymbol()),
+                ValueType::array()->parse($template, $path, $operator->getSymbol()),
                 path: $path,
                 source: $operator->getSymbol()
             );
-            $variants->onlyKeys('default', 'dql');
-            $default = $variants->require('default', ArrayType::string());
+            $variants->assertOnlyKeys('default', 'dql');
+            $default = $variants->require('default', ValueType::string());
             // Read explicitly present variants, including null, to reject invalid types.
             $dql = array_key_exists('dql', $variants->toArray())
-                ? $variants->require('dql', ArrayType::string())
+                ? $variants->require('dql', ValueType::string())
                 : null;
             $validated[$engine] = $this->dql ? ($dql ?? $default) : $default;
         }
@@ -449,7 +449,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         $existsSegments = [];
         $columnSegment  = null;
         foreach ($segments as $segment) {
-            if ($this->readSegmentOptions($segment)->string('subquery') === 'exists') {
+            if ($this->readSegmentOptions($segment)->getString('subquery') === 'exists') {
                 $existsSegments[] = $segment;
             } else {
                 $columnSegment = $segment;
@@ -463,14 +463,14 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         // Reserve all explicit aliases first, then resolve each local name once.
         $scope = new AliasScope([$parentAlias]);
         foreach ($existsSegments as $segment) {
-            $explicitAlias = $this->readSegmentOptions($segment)->string('alias');
+            $explicitAlias = $this->readSegmentOptions($segment)->getString('alias');
             if ($explicitAlias !== null) {
                 $scope->reserve($this->sanitizeSqlSimpleIdentifier($explicitAlias));
             }
         }
         $aliases = [];
         foreach ($existsSegments as $segment) {
-            $explicitAlias = $this->readSegmentOptions($segment)->string('alias');
+            $explicitAlias = $this->readSegmentOptions($segment)->getString('alias');
             $aliases[] = $explicitAlias !== null
                 ? $this->sanitizeSqlSimpleIdentifier($explicitAlias)
                 : $scope->generate();
@@ -700,7 +700,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
             if (count($segments) > 1) {
                 $parentIndex = count($segments) - 2;
                 $parent = $segments[$parentIndex];
-                $tablePrefix = $this->readSegmentOptions($parent)->string('alias') ?? $parent->getName();
+                $tablePrefix = $this->readSegmentOptions($parent)->getString('alias') ?? $parent->getName();
 
                 // Split the arguments, respecting parentheses and quotes.
                 $args = $this->splitFunctionArguments($functionArgs);
@@ -733,7 +733,7 @@ final class SqlBuilderWhere implements QueryBuilderWhereInterface
         if (count($segments) > 1) {
             $parentIndex = count($segments) - 2;
             $parent = $segments[$parentIndex];
-            $tablePrefix = $this->readSegmentOptions($parent)->string('alias') ?? $parent->getName();
+            $tablePrefix = $this->readSegmentOptions($parent)->getString('alias') ?? $parent->getName();
             return $this->sanitizeSqlIdentifier($tablePrefix . '.' . $column);
         }
 

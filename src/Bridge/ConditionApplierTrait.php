@@ -91,7 +91,7 @@ trait ConditionApplierTrait
             $segments = $path->getSegments();
             if (count($segments) > 1) {
                 $first = $segments[0];
-                $alias = $this->readSegmentOptions($first)->string('alias');
+                $alias = $this->readSegmentOptions($first)->getString('alias');
                 return [
                     'table' => $this->sanitizeSqlSimpleIdentifier($first->getName()),
                     'alias' => $alias
@@ -132,13 +132,13 @@ trait ConditionApplierTrait
             }
 
             $baseSegment = $segments[0];
-            $previousAlias = $this->readSegmentOptions($baseSegment)->string('alias') ?? $baseSegment->getName();
+            $previousAlias = $this->readSegmentOptions($baseSegment)->getString('alias') ?? $baseSegment->getName();
 
             for ($i = 1; $i < count($segments) - 1; $i++) {
                 $segment = $segments[$i];
                 $assoc = $segment->getName();
-                $alias = $this->readSegmentOptions($segment)->string('alias') ?? $assoc;
-                $joinType = strtolower($this->readSegmentOptions($segment)->string('join') ?? 'inner');
+                $alias = $this->readSegmentOptions($segment)->getString('alias') ?? $assoc;
+                $joinType = strtolower($this->readSegmentOptions($segment)->getString('join') ?? 'inner');
 
                 if (!isset($seen[$alias])) {
                     $seen[$alias] = true;
@@ -192,13 +192,13 @@ trait ConditionApplierTrait
                 continue;
             }
 
-            $previousAlias = $this->readSegmentOptions($baseSegment)->string('alias') ?? $baseSegment->getName();
+            $previousAlias = $this->readSegmentOptions($baseSegment)->getString('alias') ?? $baseSegment->getName();
 
             for ($i = 1; $i < count($segments) - 1; $i++) {
                 $segment = $segments[$i];
                 $targetTable = $this->sanitizeSqlSimpleIdentifier($segment->getName());
-                $targetAlias = $this->readSegmentOptions($segment)->string('alias');
-                $joinType = strtolower($this->readSegmentOptions($segment)->string('join') ?? 'inner');
+                $targetAlias = $this->readSegmentOptions($segment)->getString('alias');
+                $joinType = strtolower($this->readSegmentOptions($segment)->getString('join') ?? 'inner');
 
                 $joinConditions = $this->readSegmentJoinConditions($segment);
                 if (!$joinConditions) {
