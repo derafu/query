@@ -41,7 +41,9 @@
         "illuminate/database": "^13.34",
         "api-platform/core": "^4.4",
         "nikic/php-parser": "^5.9",
-        "phpstan/phpstan-doctrine": "^2.0"
+        "phpstan/phpstan-doctrine": "^2.0",
+        "symfony/dependency-injection": "^8.1",
+        "symfony/config": "^8.1"
     },
     "suggest": {
         "doctrine/dbal": "Required to use the Doctrine DBAL SQL engine (DoctrineEngine).",
