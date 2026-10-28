@@ -1,0 +1,4 @@
+imports:
+    - { resource: '../../../resources/config/query-bridge-doctrine-dbal-services.yaml' }
+    - { resource: services.yaml }
+    - { resource: connection-dbal.yaml }

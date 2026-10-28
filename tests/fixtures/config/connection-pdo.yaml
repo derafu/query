@@ -1,0 +1,5 @@
+services:
+    PDO:
+        class: PDO
+        arguments:
+            $dsn: 'sqlite::memory:'

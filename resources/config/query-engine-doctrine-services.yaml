@@ -1,0 +1,17 @@
+# Includes the core parsers and selects a SQL engine. The application supplies
+# Doctrine\DBAL\Connection; no connection, credentials or database are created here.
+imports:
+    - { resource: query-services.yaml }
+
+services:
+    Derafu\Query\Engine\Contract\SqlEngineInterface:
+        class: Derafu\Query\Engine\DoctrineEngine
+        arguments:
+            $connection: '@Doctrine\DBAL\Connection'
+
+    Derafu\Query\Builder\Contract\QueryBuilderInterface:
+        class: Derafu\Query\Builder\SqlQueryBuilder
+        shared: false
+        arguments:
+            $engine: '@Derafu\Query\Engine\Contract\SqlEngineInterface'
+            $expressionParser: '@Derafu\Query\Filter\Contract\ExpressionParserInterface'

@@ -4,12 +4,49 @@
 #   imports:
 #       - { resource: '../vendor/derafu/query/resources/config/query-services.yaml' }
 
+# Provides the shared operator catalogue and parsers without selecting a database.
+# Optional integrations (each imports this file):
+# - query-engine-pdo-services.yaml: SQL execution with an application PDO service.
+# - query-engine-doctrine-services.yaml: SQL execution with a DBAL Connection.
+# - query-bridge-doctrine-dbal-services.yaml: conditions on a DBAL query builder.
+# - query-bridge-doctrine-orm-services.yaml: conditions on an ORM query builder.
+# - query-bridge-illuminate-services.yaml: conditions on an Illuminate builder.
+# Engine files are alternatives for SqlEngineInterface. Bridge files are
+# alternatives for QueryBuilderConditionApplierInterface, not distinct instances
+# when imported together. SQL query builders are non-shared mutable objects.
+parameters:
+    derafu.query.operators.path: !php/const Derafu\Query\Operator\OperatorManagerFactory::DEFAULT_OPERATORS_PATH
+
 services:
 
     _defaults:
         autowire: true
         autoconfigure: true
         public: false
+
+    Derafu\Query\Operator\Contract\OperatorLoaderInterface:
+        class: Derafu\Query\Operator\OperatorLoader
+
+    Derafu\Query\Operator\Contract\OperatorManagerFactoryInterface:
+        class: Derafu\Query\Operator\OperatorManagerFactory
+
+    Derafu\Query\Operator\Contract\OperatorManagerInterface:
+        class: Derafu\Query\Operator\OperatorManager
+        factory: ['@Derafu\Query\Operator\Contract\OperatorManagerFactoryInterface', create]
+        arguments:
+            $path: '%derafu.query.operators.path%'
+
+    Derafu\Query\Filter\Contract\PathParserInterface:
+        class: Derafu\Query\Filter\PathParser
+
+    Derafu\Query\Filter\Contract\FilterParserInterface:
+        class: Derafu\Query\Filter\FilterParser
+
+    Derafu\Query\Filter\Contract\ExpressionParserInterface:
+        class: Derafu\Query\Filter\ExpressionParser
+
+    Derafu\Query\Filter\Contract\CompositeExpressionParserInterface:
+        class: Derafu\Query\Filter\CompositeExpressionParser
 
     # Feeds resources/translations into the consuming app's Translator (the
     # app must pass $resourceProviders: !tagged_iterator

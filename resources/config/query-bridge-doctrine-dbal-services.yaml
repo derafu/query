@@ -1,0 +1,8 @@
+# Includes the core parsers and selects one condition-applier implementation.
+# Requires doctrine/dbal. The caller supplies its query builder for each use.
+imports:
+    - { resource: query-services.yaml }
+
+services:
+    Derafu\Query\Bridge\Contract\QueryBuilderConditionApplierInterface:
+        class: Derafu\Query\Bridge\DoctrineDBALQueryBuilderConditionApplier

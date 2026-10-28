@@ -21,6 +21,9 @@ use Derafu\Query\Operator\Contract\OperatorManagerInterface;
  */
 final class OperatorManagerFactory implements OperatorManagerFactoryInterface
 {
+    /** Default operator catalogue shipped with this package. */
+    public const string DEFAULT_OPERATORS_PATH = __DIR__ . '/../../resources/operators.yaml';
+
     public function __construct(
         private readonly OperatorLoaderInterface $loader
     ) {

@@ -1,0 +1,22 @@
+imports:
+    - { resource: '../../../resources/config/query-bridge-doctrine-orm-services.yaml' }
+    - { resource: services.yaml }
+    - { resource: connection-dbal.yaml }
+
+services:
+    Psr\Cache\CacheItemPoolInterface:
+        class: Derafu\TestsQuery\Integration\Bridge\DoctrineORM\ArrayCachePool
+
+    Doctrine\ORM\Configuration:
+        factory: ['Doctrine\ORM\ORMSetup', createAttributeMetadataConfig]
+        arguments:
+            $paths: ['%fixture.query.root%/tests/src/Integration/Bridge/DoctrineORM/Entity']
+            $cache: '@Psr\Cache\CacheItemPoolInterface'
+        calls:
+            - enableNativeLazyObjects: [true]
+
+    Doctrine\ORM\EntityManagerInterface:
+        class: Doctrine\ORM\EntityManager
+        arguments:
+            $conn: '@Doctrine\DBAL\Connection'
+            $config: '@Doctrine\ORM\Configuration'

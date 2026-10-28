@@ -1,0 +1,11 @@
+imports:
+    - { resource: '../../../resources/config/query-bridge-illuminate-services.yaml' }
+    - { resource: services.yaml }
+    - { resource: connection-pdo.yaml }
+
+services:
+    Illuminate\Database\ConnectionInterface:
+        class: Illuminate\Database\SQLiteConnection
+        arguments:
+            $pdo: '@PDO'
+            $config: { driver: sqlite }

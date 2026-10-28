@@ -1,0 +1,4 @@
+imports:
+    - { resource: '../../../resources/config/query-engine-doctrine-services.yaml' }
+    - { resource: services.yaml }
+    - { resource: connection-dbal.yaml }

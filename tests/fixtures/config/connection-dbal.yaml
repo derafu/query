@@ -1,0 +1,5 @@
+services:
+    Doctrine\DBAL\Connection:
+        factory: ['Doctrine\DBAL\DriverManager', getConnection]
+        arguments:
+            $params: { driver: pdo_sqlite, memory: true }

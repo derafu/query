@@ -1,0 +1,5 @@
+imports:
+    - { resource: engine-pdo.yaml }
+
+parameters:
+    derafu.query.operators.path: '%fixture.query.root%/tests/fixtures/config/operators.yaml'
