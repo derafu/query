@@ -16,7 +16,7 @@ use ApiPlatform\Doctrine\Orm\Filter\FilterInterface;
 use ApiPlatform\Doctrine\Orm\Util\QueryNameGeneratorInterface;
 use ApiPlatform\Metadata\Operation;
 use ApiPlatform\Metadata\Parameter;
-use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
+use Derafu\Query\Bridge\Contract\QueryBuilderConditionApplierInterface;
 use Derafu\Query\Bridge\Exception\UnsupportedOperatorException;
 use Derafu\Query\Filter\Contract\CompositeExpressionParserInterface;
 use Derafu\Value\ValueType;
@@ -43,9 +43,13 @@ use Throwable;
  */
 final class SmartFilter implements FilterInterface
 {
+    /**
+     * @param QueryBuilderConditionApplierInterface $applier An applier compatible
+     * with Doctrine ORM query builders.
+     */
     public function __construct(
         private readonly CompositeExpressionParserInterface $compositeParser,
-        private readonly DoctrineORMQueryBuilderConditionApplier $applier,
+        private readonly QueryBuilderConditionApplierInterface $applier,
         private readonly string $smartFilterProperty = '__derafu_smart_filter',
     ) {
     }

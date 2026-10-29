@@ -12,6 +12,9 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Integration;
 
+use ApiPlatform\Doctrine\Orm\Util\QueryNameGenerator;
+use ApiPlatform\Metadata\QueryParameter;
+use Derafu\Query\Bridge\ApiPlatform\SmartFilter;
 use Derafu\Query\Bridge\Contract\QueryBuilderConditionApplierInterface;
 use Derafu\Query\Builder\Contract\QueryBuilderInterface;
 use Derafu\Query\Builder\Contract\QueryInterface;
@@ -197,6 +200,24 @@ final class ServicesTest extends TestCase
         $this->assertInstanceOf(QueryBuilderConditionApplierInterface::class, $applier);
         $query = $manager->createQueryBuilder()->select('p.id')->from(Product::class, 'p')->orderBy('p.id');
         $applier->apply($query, $parser->parse('price?>=250'));
+        $this->assertCount(1, $query->getParameters());
+        $this->assertSame([1, 2, 5, 8], array_column($query->getQuery()->getArrayResult(), 'id'));
+    }
+
+    public function testSmartFilterAutowiresTheOrmBridgeInterfaceAndExecutesARealQuery(): void
+    {
+        $container = $this->container('smart-filter.yaml');
+        $manager = $container->get(EntityManagerInterface::class);
+        $this->assertInstanceOf(EntityManagerInterface::class, $manager);
+        $pdo = $manager->getConnection()->getNativeConnection();
+        $this->assertInstanceOf(PDO::class, $pdo);
+        $this->seed($pdo);
+        $filter = $container->get(SmartFilter::class);
+        $this->assertInstanceOf(SmartFilter::class, $filter);
+        $query = $manager->createQueryBuilder()->select('p.id')->from(Product::class, 'p')->orderBy('p.id');
+        $filter->apply($query, new QueryNameGenerator(), Product::class, context: [
+            'parameter' => (new QueryParameter(property: 'price'))->setValue('>=250'),
+        ]);
         $this->assertCount(1, $query->getParameters());
         $this->assertSame([1, 2, 5, 8], array_column($query->getQuery()->getArrayResult(), 'id'));
     }

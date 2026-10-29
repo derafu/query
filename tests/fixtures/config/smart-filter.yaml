@@ -1,0 +1,6 @@
+imports:
+    - { resource: bridge-orm.yaml }
+
+services:
+    Derafu\Query\Bridge\ApiPlatform\SmartFilter:
+        autowire: true
