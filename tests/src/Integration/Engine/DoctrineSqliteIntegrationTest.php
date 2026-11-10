@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Integration\Engine;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Contract\QueryBuilderInterface;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
@@ -32,6 +33,7 @@ use Derafu\Query\Operator\Operator;
 use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
 use Derafu\Translation\Exception\Core\TranslatableRuntimeException;
+use Derafu\Value\ValueType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager as DoctrineDriverManager;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -99,19 +101,19 @@ class DoctrineSqliteIntegrationTest extends TestCase
 
     /**
      * @param array{sql:string,parameters:array<string,mixed>} $sql
-     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:string|list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $query
+     * @param ArrayReader $query
      */
     #[DataProvider('queryProvider')]
     public function testSqlQueries(
         string $description,
         array $sql,
-        array $query
+        ArrayReader $query
     ): void {
         // Execute raw SQL.
         $expected = $this->engine->execute($sql['sql'], $sql['parameters']);
 
         // Build query using ConfigQuery and the QueryBuilder, then execute.
-        $config = new QueryConfig($query);
+        $config = new QueryConfig($query->toMap());
         $builder = $config->applyTo($this->query->new());
         $actual = $builder->execute();
 
@@ -120,18 +122,23 @@ class DoctrineSqliteIntegrationTest extends TestCase
     }
 
     /**
-     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:string|list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int}}>
+     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},ArrayReader}>
      */
     public static function queryProvider(): array
     {
-        $cases = require __DIR__ . '/../../../fixtures/integration/queries_integration.php';
+        $cases = ArrayReader::fromValue(require __DIR__ . '/../../../fixtures/integration/queries_integration.php');
         $data = [];
 
-        foreach ($cases['cases'] as $name => $case) {
+        foreach ($cases->requireMapOf('cases', ValueType::array()) as $name => $case) {
+            $case = ArrayReader::fromArray($case);
+            $sql = $case->requireReader('sql');
             $data[$name] = [
-                $case['description'],
-                $case['sql'],
-                $case['query'],
+                $case->requireString('description'),
+                [
+                    'sql' => $sql->requireString('sql'),
+                    'parameters' => $sql->requireMap('parameters'),
+                ],
+                $case->requireReader('query', ValueType::map()),
             ];
         }
 

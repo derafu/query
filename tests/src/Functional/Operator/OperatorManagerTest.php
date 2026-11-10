@@ -212,7 +212,7 @@ final class OperatorManagerTest extends TestCase
             ->willReturn($config['cast'] ?? [])
         ;
         $mockConfig->method('get')->willReturnCallback(
-            fn ($key) => $config[$key] ?? null
+            fn (string $key) => $config[$key] ?? null
         );
 
         return $mockConfig;

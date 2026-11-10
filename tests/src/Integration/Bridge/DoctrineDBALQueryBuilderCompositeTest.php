@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Integration\Bridge;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Bridge\DoctrineDBALQueryBuilderConditionApplier;
 use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
@@ -29,6 +30,7 @@ use Derafu\Query\Filter\Segment;
 use Derafu\Query\Operator\Operator;
 use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
+use Derafu\Value\ValueType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Query\QueryBuilder as DoctrineDBALQueryBuilder;
@@ -97,13 +99,13 @@ class DoctrineDBALQueryBuilderCompositeTest extends TestCase
 
     /**
      * @param array{sql:string,parameters:array<string,mixed>} $sql
-     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $query
+     * @param ArrayReader $query
      */
     #[DataProvider('compositeQueryProvider')]
     public function testCompositeQueries(
         string $description,
         array $sql,
-        array $query
+        ArrayReader $query
     ): void {
         $expected = $this->connection->fetchAllAssociative($sql['sql'], $sql['parameters']);
 
@@ -114,18 +116,23 @@ class DoctrineDBALQueryBuilderCompositeTest extends TestCase
     }
 
     /**
-     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int}}>
+     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},ArrayReader}>
      */
     public static function compositeQueryProvider(): array
     {
-        $cases = require __DIR__ . '/../../../fixtures/integration/queries_integration.php';
+        $cases = ArrayReader::fromValue(require __DIR__ . '/../../../fixtures/integration/queries_integration.php');
         $data = [];
 
-        foreach ($cases['composite_cases'] as $name => $case) {
+        foreach ($cases->requireMapOf('composite_cases', ValueType::array()) as $name => $case) {
+            $case = ArrayReader::fromArray($case);
+            $sql = $case->requireReader('sql');
             $data[$name] = [
-                $case['description'],
-                $case['sql'],
-                $case['query'],
+                $case->requireString('description'),
+                [
+                    'sql' => $sql->requireString('sql'),
+                    'parameters' => $sql->requireMap('parameters'),
+                ],
+                $case->requireReader('query', ValueType::map()),
             ];
         }
 
@@ -133,25 +140,25 @@ class DoctrineDBALQueryBuilderCompositeTest extends TestCase
     }
 
     /**
-     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $config
+     * @param ArrayReader $config
      */
-    private function buildQueryFromConfig(array $config): DoctrineDBALQueryBuilder
+    private function buildQueryFromConfig(ArrayReader $config): DoctrineDBALQueryBuilder
     {
         $qb = $this->connection->createQueryBuilder();
 
-        if (isset($config['table'])) {
-            $alias = $config['alias'] ?? null;
-            $qb->from($config['table'], $alias);
+        if ($config->hasValue('table')) {
+            $alias = $config->getString('alias');
+            $qb->from($config->requireString('table'), $alias);
         }
 
-        if (isset($config['select'])) {
-            $qb->select((string) $config['select']);
+        if ($config->hasValue('select')) {
+            $qb->select($config->requireString('select'));
         } else {
             $qb->select('*');
         }
 
-        if (isset($config['composite'])) {
-            $parsed = $this->compositeParser->parse($config['composite']);
+        if ($config->hasValue('composite')) {
+            $parsed = $this->compositeParser->parse($config->requireString('composite'));
             $this->applier->apply($qb, $parsed);
         }
 

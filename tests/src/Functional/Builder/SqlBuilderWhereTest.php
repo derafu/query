@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Functional\Builder;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
 use Derafu\Query\Builder\Sql\SqlQuery;
@@ -92,15 +93,21 @@ class SqlBuilderWhereTest extends TestCase
      */
     public static function queryCasesProvider(): array
     {
-        $cases = require __DIR__ . '/../../../fixtures/functional/queries_sql_where.php';
+        $cases = ArrayReader::fromValue(require __DIR__ . '/../../../fixtures/functional/queries_sql_where.php');
         $testCases = [];
 
-        foreach ($cases['cases'] as $case) {
-            $testCases["Path: {$case['path']}, Filter: {$case['filter']}"] = [
-                'pathExpression' => $case['path'],
-                'filterExpression' => $case['filter'],
-                'expected' => $case['expected'],
-                'engine' => $case['engine'] ?? 'pgsql',
+        foreach ($cases->requireReaders('cases') as $case) {
+            $path = $case->requireString('path');
+            $filter = $case->requireString('filter');
+            $expected = $case->requireReader('expected');
+            $testCases["Path: {$path}, Filter: {$filter}"] = [
+                'pathExpression' => $path,
+                'filterExpression' => $filter,
+                'expected' => [
+                    'sql' => $expected->requireString('sql'),
+                    'parameters' => $expected->requireMap('parameters'),
+                ],
+                'engine' => $case->getString('engine') ?? 'pgsql',
             ];
         }
 

@@ -13,13 +13,15 @@ declare(strict_types=1);
 namespace Derafu\Query\Bridge;
 
 use Derafu\Query\Bridge\Contract\QueryBuilderConditionApplierInterface;
-use Derafu\Query\Bridge\Illuminate\CompiledCondition;
+use Derafu\Query\Bridge\Illuminate\CompiledExpression;
 use Derafu\Query\Filter\Contract\CompositeConditionInterface;
 use Derafu\Query\Filter\Contract\ConditionInterface;
+use Derafu\Value\ValueType;
 use Illuminate\Contracts\Database\Query\Expression;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Database\Query\JoinClause;
 
 /**
  * Applies parsed conditions to an Illuminate Query Builder.
@@ -53,7 +55,7 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
             $this->getFromAliasOrTable($qb)
         );
 
-        $compiled = new CompiledCondition($sql, $params);
+        $compiled = new CompiledExpression($sql, $params);
         $qb->where($compiled);
         $qb->addBinding($compiled->getBindings(), 'where');
     }
@@ -72,7 +74,7 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
             $condition
         );
 
-        $compiled = new CompiledCondition($sql, $params);
+        $compiled = new CompiledExpression($sql, $params);
         $qb->having($compiled);
         $qb->addBinding($compiled->getBindings(), 'having');
     }
@@ -134,15 +136,15 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
                 match ($spec['type']) {
                     'left' => $qb->leftJoin(
                         $spec['tableRef'],
-                        fn ($join) => $join->whereRaw($spec['condition'])
+                        fn (JoinClause $join) => $join->whereRaw(new CompiledExpression($spec['condition']))
                     ),
                     'right' => $qb->rightJoin(
                         $spec['tableRef'],
-                        fn ($join) => $join->whereRaw($spec['condition'])
+                        fn (JoinClause $join) => $join->whereRaw(new CompiledExpression($spec['condition']))
                     ),
                     default => $qb->join(
                         $spec['tableRef'],
-                        fn ($join) => $join->whereRaw($spec['condition'])
+                        fn (JoinClause $join) => $join->whereRaw(new CompiledExpression($spec['condition']))
                     ),
                 };
             }
@@ -192,8 +194,13 @@ final class IlluminateQueryBuilderConditionApplier implements QueryBuilderCondit
         if (empty($joins)) {
             return false;
         }
-        foreach ($joins as $join) {
-            if (strtolower($join->table) === strtolower($tableRef)) {
+        foreach ($joins as $index => $join) {
+            $join = ValueType::instanceOf(JoinClause::class)->parse($join, path: 'joins.' . $index);
+            $table = $join->table;
+            if ($table instanceof Expression) {
+                $table = (string) $table->getValue($qb->getGrammar());
+            }
+            if (strtolower($table) === strtolower($tableRef)) {
                 return true;
             }
         }

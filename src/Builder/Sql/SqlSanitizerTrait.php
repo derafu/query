@@ -30,14 +30,14 @@ trait SqlSanitizerTrait
     /**
      * The official function to sanitize/quote SQL identifiers.
      *
-     * @var Closure|null
+     * @var (Closure(string): string)|null
      */
     private ?Closure $sanitizeSqlIdentifierCallback = null;
 
     /**
      * Sets the official function to sanitize/quote SQL identifiers.
      *
-     * @param Closure $sanitizeSqlIdentifierCallback
+     * @param Closure(string): string $sanitizeSqlIdentifierCallback
      * @return self
      */
     public function setSanitizeSqlIdentifierCallback(

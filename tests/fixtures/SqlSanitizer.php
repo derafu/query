@@ -32,6 +32,9 @@ final class SqlSanitizer
         return $this->sanitizeSqlSimpleIdentifier($expression);
     }
 
+    /**
+     * @param Closure(string): string $callback
+     */
     public function setSanitizeCallback(Closure $callback): void
     {
         $this->setSanitizeSqlIdentifierCallback($callback);

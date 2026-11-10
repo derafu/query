@@ -12,10 +12,12 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Functional\Filter;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Filter\Path;
 use Derafu\Query\Filter\PathParser;
 use Derafu\Query\Filter\Segment;
 use Derafu\Translation\Exception\Logic\TranslatableInvalidArgumentException;
+use Derafu\Value\ValueType;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -90,13 +92,21 @@ final class PathParserTest extends TestCase
      */
     public static function validPathProvider(): array
     {
-        $fixtures = require __DIR__ . '/../../../fixtures/functional/paths.php';
+        $fixtures = ArrayReader::fromValue(require __DIR__ . '/../../../fixtures/functional/paths.php');
         $data = [];
 
-        foreach ($fixtures['OK'] as $index => $fixture) {
-            $data['Valid Path #' . $index . ':' . $fixture['expression']] = [
-                $fixture['expression'],
-                $fixture['expected'],
+        foreach ($fixtures->requireReaders('OK') as $index => $fixture) {
+            $expected = $fixture->requireReader('expected');
+            $data['Valid Path #' . $index . ':' . $fixture->requireString('expression')] = [
+                $fixture->requireString('expression'),
+                [
+                    'segments_count' => $expected->requireInt('segments_count'),
+                    'segment_names' => $expected->requireStringList('segment_names'),
+                    'segment_options' => $expected->requireListOf(
+                        'segment_options',
+                        ValueType::mapOf(ValueType::oneOf(ValueType::string(), ValueType::mapOf(ValueType::string())))
+                    ),
+                ],
             ];
         }
 
@@ -110,12 +120,12 @@ final class PathParserTest extends TestCase
      */
     public static function invalidPathProvider(): array
     {
-        $fixtures = require __DIR__ . '/../../../fixtures/functional/paths.php';
+        $fixtures = ArrayReader::fromValue(require __DIR__ . '/../../../fixtures/functional/paths.php');
         $data = [];
 
-        foreach ($fixtures['FAIL'] as $index => $fixture) {
-            $data['Invalid Path #' . $index . ':' . $fixture['expression']] = [
-                $fixture['expression'],
+        foreach ($fixtures->requireReaders('FAIL') as $index => $fixture) {
+            $data['Invalid Path #' . $index . ':' . $fixture->requireString('expression')] = [
+                $fixture->requireString('expression'),
             ];
         }
 

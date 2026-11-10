@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Integration\Bridge\DoctrineORM;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
 use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
@@ -29,6 +30,7 @@ use Derafu\Query\Filter\Segment;
 use Derafu\Query\Operator\Operator;
 use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
+use Derafu\Value\ValueType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\ORM\EntityManager;
@@ -109,13 +111,13 @@ class DoctrineORMQueryBuilderCompositeTest extends TestCase
 
     /**
      * @param array{sql:string,parameters:array<string,mixed>} $sql
-     * @param array{table?:class-string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{join:string,alias:string},leftJoin?:array{join:string,alias:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $query
+     * @param ArrayReader $query
      */
     #[DataProvider('compositeQueryProvider')]
     public function testCompositeQueries(
         string $description,
         array $sql,
-        array $query
+        ArrayReader $query
     ): void {
         $expected = $this->connection->fetchAllAssociative($sql['sql'], $sql['parameters']);
         $qb = $this->buildQueryFromConfig($query);
@@ -128,18 +130,23 @@ class DoctrineORMQueryBuilderCompositeTest extends TestCase
     }
 
     /**
-     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:class-string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{join:string,alias:string},leftJoin?:array{join:string,alias:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int}}>
+     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},ArrayReader}>
      */
     public static function compositeQueryProvider(): array
     {
-        $cases = require __DIR__ . '/../../../../fixtures/integration/doctrine_orm.php';
+        $cases = ArrayReader::fromValue(require __DIR__ . '/../../../../fixtures/integration/doctrine_orm.php');
         $data = [];
 
-        foreach ($cases['composite_cases'] as $name => $case) {
+        foreach ($cases->requireMapOf('composite_cases', ValueType::array()) as $name => $case) {
+            $case = ArrayReader::fromArray($case);
+            $sql = $case->requireReader('sql');
             $data[$name] = [
-                $case['description'],
-                $case['sql'],
-                $case['query'],
+                $case->requireString('description'),
+                [
+                    'sql' => $sql->requireString('sql'),
+                    'parameters' => $sql->requireMap('parameters'),
+                ],
+                $case->requireReader('query', ValueType::map()),
             ];
         }
 
@@ -177,23 +184,23 @@ class DoctrineORMQueryBuilderCompositeTest extends TestCase
     }
 
     /**
-     * @param array{table?:class-string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{join:string,alias:string},leftJoin?:array{join:string,alias:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $config
+     * @param ArrayReader $config
      */
-    private function buildQueryFromConfig(array $config): DoctrineORMQueryBuilder
+    private function buildQueryFromConfig(ArrayReader $config): DoctrineORMQueryBuilder
     {
         $qb = $this->em->createQueryBuilder();
 
-        if (isset($config['table'])) {
-            $alias = $config['alias'] ?? 'e';
-            $qb->from($config['table'], $alias);
+        if ($config->hasValue('table')) {
+            $alias = $config->getString('alias') ?? 'e';
+            $qb->from($config->require('table', ValueType::classString()), $alias);
         }
 
-        if (isset($config['select'])) {
-            $qb->select($config['select']);
+        if ($config->hasValue('select')) {
+            $qb->select($config->requireString('select'));
         }
 
-        if (isset($config['composite'])) {
-            $parsed = $this->compositeParser->parse($config['composite']);
+        if ($config->hasValue('composite')) {
+            $parsed = $this->compositeParser->parse($config->requireString('composite'));
             $this->applier->apply($qb, $parsed);
         }
 

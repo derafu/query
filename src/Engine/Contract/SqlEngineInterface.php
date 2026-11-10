@@ -30,7 +30,7 @@ interface SqlEngineInterface
      *
      * @param string $sql The SQL query to execute.
      * @param array<string,mixed> $parameters Named parameters for the query.
-     * @return array<array<string,mixed>> The query results as an array of rows.
+     * @return array<array<array-key,mixed>> The query results as an array of rows.
      */
     public function execute(string $sql, array $parameters = []): array;
 
@@ -53,7 +53,7 @@ interface SqlEngineInterface
      *
      * @param string $sql The SQL query to execute.
      * @param array<string,mixed> $parameters Named parameters for the query.
-     * @return array<array<string,mixed>> The query results as an array of rows.
+     * @return array<array<array-key,mixed>> The query results as an array of rows.
      */
     public function getTable(string $sql, array $parameters = []): array;
 
@@ -62,7 +62,7 @@ interface SqlEngineInterface
      *
      * @param string $sql The SQL query to execute.
      * @param array<string,mixed> $parameters Named parameters for the query.
-     * @return array<string,mixed> The query results as an array of values.
+     * @return array<array-key,mixed> The query results as an array of values.
      */
     public function getRow(string $sql, array $parameters = []): array;
 

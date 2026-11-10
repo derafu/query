@@ -22,7 +22,7 @@ interface PathInterface extends Stringable
     /**
      * Gets all segments of the path.
      *
-     * @return SegmentInterface[] All path segments.
+     * @return array<int, SegmentInterface> All path segments.
      */
     public function getSegments(): array;
 

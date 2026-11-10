@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Functional\Filter;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Filter\Contract\FilterInterface;
 use Derafu\Query\Filter\Contract\FilterParserInterface;
 use Derafu\Query\Filter\Filter;
@@ -63,17 +64,17 @@ final class FilterParserTest extends TestCase
      */
     public static function parserCasesProvider(): array
     {
-        $filters = require __DIR__ . '/../../../fixtures/functional/filters.php';
+        $filters = ArrayReader::fromValue(require __DIR__ . '/../../../fixtures/functional/filters.php');
 
         $cases = [];
 
         // Process valid cases.
-        foreach ($filters['OK'] as $expression) {
+        foreach ($filters->requireStringList('OK') as $expression) {
             $cases['Valid: ' . $expression] = [$expression, 'valid'];
         }
 
         // Process invalid cases.
-        foreach ($filters['FAIL'] as $expression) {
+        foreach ($filters->requireStringList('FAIL') as $expression) {
             $cases['Invalid: ' . $expression] = [$expression, 'invalid'];
         }
 

@@ -13,7 +13,7 @@ declare(strict_types=1);
 namespace Derafu\TestsQuery\Integration\Bridge;
 
 use Derafu\Query\Bridge\DoctrineDBALQueryBuilderConditionApplier;
-use Derafu\Query\Bridge\Illuminate\CompiledCondition;
+use Derafu\Query\Bridge\Illuminate\CompiledExpression;
 use Derafu\Query\Bridge\IlluminateQueryBuilderConditionApplier;
 use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
@@ -44,7 +44,7 @@ use PHPUnit\Framework\TestCase;
 #[UsesClass(DoctrineDBALQueryBuilderConditionApplier::class)]
 #[UsesClass(IlluminateQueryBuilderConditionApplier::class)]
 #[UsesClass(SqlQueryBuilder::class)]
-#[UsesClass(CompiledCondition::class)]
+#[UsesClass(CompiledExpression::class)]
 #[UsesClass(SqlBuilderWhere::class)]
 #[UsesClass(SqlQuery::class)]
 #[UsesClass(PdoEngine::class)]

@@ -562,7 +562,7 @@ final class SqlQueryBuilder implements QueryBuilderInterface
     /**
      * {@inheritDoc}
      *
-     * @return array<array<string,mixed>>
+     * @return array<array<array-key,mixed>>
      */
     public function execute(): array
     {

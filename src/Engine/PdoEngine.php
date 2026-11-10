@@ -15,6 +15,7 @@ namespace Derafu\Query\Engine;
 use Derafu\Query\Engine\Abstract\AbstractSqlEngine;
 use Derafu\Query\Engine\Contract\SqlEngineInterface;
 use Derafu\Translation\Exception\Core\TranslatableRuntimeException as RuntimeException;
+use Derafu\Value\ValueType;
 use PDO;
 
 /**
@@ -51,7 +52,10 @@ final class PdoEngine extends AbstractSqlEngine implements SqlEngineInterface
         $stmt = $this->connection->prepare($sql);
         $stmt->execute($parameters);
 
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return ValueType::listOf(ValueType::array())->parse(
+            $stmt->fetchAll(PDO::FETCH_ASSOC),
+            path: 'rows'
+        );
     }
 
     /**

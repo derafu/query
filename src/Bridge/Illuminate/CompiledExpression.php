@@ -17,11 +17,11 @@ use Illuminate\Contracts\Database\Query\ConditionExpression;
 use Illuminate\Database\Grammar;
 
 /**
- * A condition compiled by the query SQL builder for Illuminate.
+ * A SQL expression with positional parameter bindings for Illuminate.
  *
  * @internal
  */
-final readonly class CompiledCondition implements ConditionExpression
+final readonly class CompiledExpression implements ConditionExpression
 {
     private string $sql;
 
@@ -29,6 +29,7 @@ final readonly class CompiledCondition implements ConditionExpression
     private array $bindings;
 
     /**
+     * @param string $sql SQL text with optional named parameter placeholders.
      * @param array<string, mixed> $parameters Named parameters from the SQL compiler.
      */
     public function __construct(string $sql, array $parameters = [])
@@ -69,12 +70,19 @@ REGEX;
         $this->bindings = $bindings;
     }
 
-    /** @return list<mixed> */
+    /**
+     * Gets positional values in SQL placeholder order.
+     *
+     * @return list<mixed>
+     */
     public function getBindings(): array
     {
         return $this->bindings;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getValue(Grammar $grammar): string
     {
         return $this->sql;

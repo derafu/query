@@ -15,7 +15,7 @@ namespace Derafu\TestsQuery\Integration\Database;
 use Derafu\Query\Bridge\DoctrineDBALQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\Exception\UnsupportedOperatorException;
-use Derafu\Query\Bridge\Illuminate\CompiledCondition;
+use Derafu\Query\Bridge\Illuminate\CompiledExpression;
 use Derafu\Query\Bridge\IlluminateQueryBuilderConditionApplier;
 use Derafu\Query\Builder\SqlQueryBuilder;
 use Derafu\Query\Config\JsonConfigLoader;
@@ -522,7 +522,7 @@ SELECT :second AS second_result, :first AS first_result, :second AS repeated_val
 -- :first
 SQL;
         $value = "value with ? and :first and 'quotes'";
-        $compiled = new CompiledCondition($sql, [
+        $compiled = new CompiledExpression($sql, [
             'first' => 'first',
             'second' => $value,
             'nullable' => null,

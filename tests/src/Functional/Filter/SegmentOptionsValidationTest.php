@@ -14,7 +14,7 @@ namespace Derafu\TestsQuery\Functional\Filter;
 
 use Derafu\Query\Bridge\DoctrineDBALQueryBuilderConditionApplier;
 use Derafu\Query\Bridge\DoctrineORMQueryBuilderConditionApplier;
-use Derafu\Query\Bridge\Illuminate\CompiledCondition;
+use Derafu\Query\Bridge\Illuminate\CompiledExpression;
 use Derafu\Query\Bridge\IlluminateQueryBuilderConditionApplier;
 use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
@@ -50,7 +50,7 @@ use PHPUnit\Framework\TestCase;
 
 #[UsesClass(AliasScope::class)]
 #[CoversTrait(SegmentOptionsTrait::class)]
-#[UsesClass(CompiledCondition::class)]
+#[UsesClass(CompiledExpression::class)]
 #[UsesClass(SqlBuilderWhere::class)]
 #[UsesClass(SqlQuery::class)]
 #[UsesClass(SqlQueryBuilder::class)]

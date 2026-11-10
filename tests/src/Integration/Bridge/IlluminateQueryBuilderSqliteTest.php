@@ -12,7 +12,8 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Integration\Bridge;
 
-use Derafu\Query\Bridge\Illuminate\CompiledCondition;
+use Derafu\Array\ArrayReader;
+use Derafu\Query\Bridge\Illuminate\CompiledExpression;
 use Derafu\Query\Bridge\IlluminateQueryBuilderConditionApplier;
 use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
@@ -31,11 +32,13 @@ use Derafu\Query\Operator\Operator;
 use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
 use Derafu\TestsQuery\Fixture\Models\IlluminateCustomer;
+use Derafu\Value\ValueType;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionResolver;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as IlluminateQueryBuilder;
+use Illuminate\Database\Query\JoinClause;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\UsesClass;
@@ -45,7 +48,7 @@ require_once __DIR__ . '/../../../fixtures/models/IlluminateCustomer.php';
 
 #[UsesClass(AliasScope::class)]
 #[CoversClass(IlluminateQueryBuilderConditionApplier::class)]
-#[CoversClass(CompiledCondition::class)]
+#[CoversClass(CompiledExpression::class)]
 #[UsesClass(SqlBuilderWhere::class)]
 #[UsesClass(SqlQuery::class)]
 #[UsesClass(CompositeCondition::class)]
@@ -103,13 +106,13 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
 
     /**
      * @param array{sql:string,parameters:array<string,mixed>} $sql
-     * @param array{table?:string,alias?:string,select?:literal-string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:literal-string,alias?:string},leftJoin?:array{table:string,condition:literal-string,alias?:string},rightJoin?:array{table:string,condition:literal-string,alias?:string},groupBy?:literal-string|list<literal-string>,orderBy?:array<literal-string,literal-string>,limit?:int,offset?:int} $query
+     * @param ArrayReader $query
      */
     #[DataProvider('queryProvider')]
     public function testSqlQueries(
         string $description,
         array $sql,
-        array $query
+        ArrayReader $query
     ): void {
         $expected = array_map(
             fn ($row) => (array) $row,
@@ -131,7 +134,7 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
         $this->assertSame([['id' => 1], ['id' => 2], ['id' => 4]], $qb->get()->map(fn ($row) => (array) $row)->all());
     }
 
-    public function testEloquentBuilderReceivesTheCompiledCondition(): void
+    public function testEloquentBuilderReceivesTheCompiledExpression(): void
     {
         $previous = Model::getConnectionResolver();
         $resolver = new ConnectionResolver(['default' => $this->connection]);
@@ -157,6 +160,24 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
         $this->applier->apply($qb, $condition);
 
         $this->assertSame(['500'], $qb->getBindings());
+        $this->assertSame([['id' => 1], ['id' => 2]], $qb->get()->map(fn ($row) => (array) $row)->all());
+    }
+
+    public function testExistingJoinExpressionIsNotDuplicated(): void
+    {
+        $qb = $this->connection->query()
+            ->from('customers', 'c')
+            ->leftJoin($this->connection->raw('invoices as i'), 'c.id', '=', 'i.customer_id')
+            ->select('c.id')
+            ->orderBy('c.id');
+        $condition = $this->expressionParser->parse(
+            'customers[alias:c]__invoices[on:id=customer_id,join:left,alias:i]__status?=paid'
+        );
+
+        $this->applier->apply($qb, $condition);
+
+        $this->assertCount(1, $qb->joins ?? []);
+        $this->assertSame(['paid'], $qb->getBindings());
         $this->assertSame([['id' => 1], ['id' => 2]], $qb->get()->map(fn ($row) => (array) $row)->all());
     }
 
@@ -204,7 +225,7 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
         $this->assertSame([['type' => 'company', 'total' => 2]], $qb->get()->map(fn ($row) => (array) $row)->all());
     }
 
-    public function testCompiledConditionsKeepSqlLikeValuesInBindings(): void
+    public function testCompiledExpressionsKeepSqlLikeValuesInBindings(): void
     {
         $value = "John Smith' OR 1=1 --";
         $qb = $this->connection->table('customers')->select('id');
@@ -215,7 +236,7 @@ class IlluminateQueryBuilderSqliteTest extends TestCase
         $this->assertSame([], $qb->get()->all());
     }
 
-    public function testCompiledConditionPreservesQuotedIdentifiersAndLiterals(): void
+    public function testCompiledExpressionPreservesQuotedIdentifiersAndLiterals(): void
     {
         $sql = <<<'SQL'
 SELECT ":value" AS quoted_identifier, `:value` AS backtick_identifier,
@@ -224,7 +245,7 @@ FROM (SELECT 'identifier' AS ":value")
 /* :value */
 -- :value
 SQL;
-        $compiled = new CompiledCondition($sql, ['value' => 'bound']);
+        $compiled = new CompiledExpression($sql, ['value' => 'bound']);
         $this->assertSame(['bound'], $compiled->getBindings());
         $rows = $this->connection->select(
             $compiled->getValue($this->connection->getQueryGrammar()),
@@ -240,18 +261,23 @@ SQL;
     }
 
     /**
-     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:string,alias?:string,select?:literal-string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:literal-string,alias?:string},leftJoin?:array{table:string,condition:literal-string,alias?:string},rightJoin?:array{table:string,condition:literal-string,alias?:string},groupBy?:literal-string|list<literal-string>,orderBy?:array<literal-string,literal-string>,limit?:int,offset?:int}}>
+     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},ArrayReader}>
      */
     public static function queryProvider(): array
     {
-        $cases = require __DIR__ . '/../../../fixtures/integration/queries_integration.php';
+        $cases = ArrayReader::fromValue(require __DIR__ . '/../../../fixtures/integration/queries_integration.php');
         $data = [];
 
-        foreach ($cases['cases'] as $name => $case) {
+        foreach ($cases->requireMapOf('cases', ValueType::array()) as $name => $case) {
+            $case = ArrayReader::fromArray($case);
+            $sql = $case->requireReader('sql');
             $data[$name] = [
-                $case['description'],
-                $case['sql'],
-                $case['query'],
+                $case->requireString('description'),
+                [
+                    'sql' => $sql->requireString('sql'),
+                    'parameters' => $sql->requireMap('parameters'),
+                ],
+                $case->requireReader('query', ValueType::map()),
             ];
         }
 
@@ -259,50 +285,51 @@ SQL;
     }
 
     /**
-     * Builds an Illuminate QueryBuilder from a query config array.
+     * Builds an Illuminate QueryBuilder from a query configuration reader.
      *
-     * @param array{table?:string,alias?:string,select?:literal-string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:literal-string,alias?:string},leftJoin?:array{table:string,condition:literal-string,alias?:string},rightJoin?:array{table:string,condition:literal-string,alias?:string},groupBy?:literal-string|list<literal-string>,orderBy?:array<literal-string,literal-string>,limit?:int,offset?:int} $config
+     * @param ArrayReader $config
      */
-    private function buildQueryFromConfig(array $config): IlluminateQueryBuilder
+    private function buildQueryFromConfig(ArrayReader $config): IlluminateQueryBuilder
     {
         $qb = $this->connection->query();
 
         // FROM / table.
-        if (isset($config['table'])) {
-            $alias = $config['alias'] ?? null;
-            $qb->from($config['table'], $alias);
+        if ($config->hasValue('table')) {
+            $alias = $config->getString('alias');
+            $qb->from($config->requireString('table'), $alias);
         }
 
         // SELECT.
-        if (isset($config['select'])) {
-            $qb->selectRaw($config['select']);
+        if ($config->hasValue('select')) {
+            $qb->select(new CompiledExpression($config->requireString('select')));
         }
 
         // DISTINCT.
-        if (isset($config['distinct']) && $config['distinct']) {
+        if ($config->hasValue('distinct') && $config->requireBool('distinct')) {
             $qb->distinct();
         }
 
         // Explicit JOINs (non-path based).
         foreach (['innerJoin', 'leftJoin', 'rightJoin'] as $joinType) {
-            if (!isset($config[$joinType])) {
+            if (!$config->hasValue($joinType)) {
                 continue;
             }
-            $join = $config[$joinType];
-            $tableRef = $join['table'] . (isset($join['alias']) ? ' as ' . $join['alias'] : '');
-            $condition = $join['condition'];
+            $join = $config->requireReader($joinType, ValueType::map());
+            $alias = $join->getString('alias');
+            $tableRef = $join->requireString('table') . ($alias !== null ? ' as ' . $alias : '');
+            $condition = new CompiledExpression($join->requireString('condition'));
             match ($joinType) {
                 'innerJoin' => $qb->join(
                     $tableRef,
-                    fn ($j) => $j->whereRaw($condition)
+                    fn (JoinClause $j) => $j->whereRaw($condition)
                 ),
                 'leftJoin' => $qb->leftJoin(
                     $tableRef,
-                    fn ($j) => $j->whereRaw($condition)
+                    fn (JoinClause $j) => $j->whereRaw($condition)
                 ),
                 'rightJoin' => $qb->rightJoin(
                     $tableRef,
-                    fn ($j) => $j->whereRaw($condition)
+                    fn (JoinClause $j) => $j->whereRaw($condition)
                 ),
             };
         }
@@ -314,33 +341,48 @@ SQL;
         }
 
         // HAVING conditions via the applier.
-        if (isset($config['having'])) {
+        if ($config->hasValue('having')) {
             $havingComposite = CompositeCondition::and();
-            $this->addToComposite($havingComposite, $config['having']);
+            $this->addToComposite(
+                $havingComposite,
+                $config->require('having', ValueType::oneOf(
+                    ValueType::string(),
+                    ValueType::listOf(ValueType::oneOf(
+                        ValueType::string(),
+                        ValueType::listOf(ValueType::string())
+                    ))
+                ))
+            );
             $this->applier->applyHaving($qb, $havingComposite);
         }
 
         // GROUP BY.
-        if (isset($config['groupBy'])) {
-            $groups = is_array($config['groupBy'])
-                ? $config['groupBy']
-                : [$config['groupBy']];
-            $qb->groupByRaw(implode(', ', $groups));
+        if ($config->hasValue('groupBy')) {
+            $groupBy = $config->require('groupBy', ValueType::oneOf(
+                ValueType::string(),
+                ValueType::listOf(ValueType::string())
+            ));
+            $groups = is_array($groupBy) ? $groupBy : [$groupBy];
+            $qb->groupBy(new CompiledExpression(implode(', ', $groups)));
         }
 
         // ORDER BY.
-        if (isset($config['orderBy'])) {
-            foreach ($config['orderBy'] as $column => $direction) {
-                $qb->orderByRaw($column . ' ' . $direction);
+        if ($config->hasValue('orderBy')) {
+            foreach ($config->requireMapOf('orderBy', ValueType::string()) as $column => $direction) {
+                $direction = ValueType::literal('asc', 'desc')->parse(
+                    strtolower($direction),
+                    path: 'orderBy.' . $column
+                );
+                $qb->orderBy(new CompiledExpression($column), $direction);
             }
         }
 
         // LIMIT / OFFSET.
-        if (isset($config['limit'])) {
-            $qb->limit($config['limit']);
+        if ($config->hasValue('limit')) {
+            $qb->limit($config->requireInt('limit'));
         }
-        if (isset($config['offset'])) {
-            $qb->offset($config['offset']);
+        if ($config->hasValue('offset')) {
+            $qb->offset($config->requireInt('offset'));
         }
 
         return $qb;
@@ -350,46 +392,57 @@ SQL;
      * Builds a CompositeCondition from the where/andWhere/orWhere/andWhereOr
      * config keys, following the same composition logic as SqlQueryBuilder.
      *
-     * @param array{table?:string,alias?:string,select?:literal-string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:literal-string,alias?:string},leftJoin?:array{table:string,condition:literal-string,alias?:string},rightJoin?:array{table:string,condition:literal-string,alias?:string},groupBy?:literal-string|list<literal-string>,orderBy?:array<literal-string,literal-string>,limit?:int,offset?:int} $config
+     * @param ArrayReader $config
      */
-    private function buildWhereComposite(array $config): ?CompositeConditionInterface
+    private function buildWhereComposite(ArrayReader $config): ?CompositeConditionInterface
     {
+        $conditionType = ValueType::oneOf(
+            ValueType::string(),
+            ValueType::listOf(ValueType::oneOf(
+                ValueType::string(),
+                ValueType::listOf(ValueType::string())
+            ))
+        );
         $composite = null;
 
         // where.
-        if (isset($config['where'])) {
+        if ($config->hasValue('where')) {
             $composite = CompositeCondition::and();
-            $this->addToComposite($composite, $config['where']);
+            $this->addToComposite($composite, $config->require('where', $conditionType));
         }
 
         // andWhere is applied before orWhere (matches QueryConfig::applyTo order).
-        if (isset($config['andWhere'])) {
+        if ($config->hasValue('andWhere')) {
             if ($composite === null) {
                 $composite = CompositeCondition::and();
             }
-            $this->addToComposite($composite, $config['andWhere']);
+            $this->addToComposite($composite, $config->require('andWhere', $conditionType));
         }
 
         // orWhere wraps the existing composite in an OR.
-        if (isset($config['orWhere'])) {
+        if ($config->hasValue('orWhere')) {
             if ($composite === null) {
                 $composite = CompositeCondition::and();
-                $this->addToComposite($composite, $config['orWhere']);
+                $this->addToComposite($composite, $config->require('orWhere', $conditionType));
             } else {
                 $existing = $composite;
                 $composite = CompositeCondition::or();
                 $composite->add($existing);
-                $this->addOrGroupToComposite($composite, $config['orWhere']);
+                $this->addOrGroupToComposite($composite, $config->require('orWhere', $conditionType));
             }
         }
 
         // andWhereOr adds an OR group ANDed to the current composite.
-        if (isset($config['andWhereOr'])) {
+        if ($config->hasValue('andWhereOr')) {
             if ($composite === null) {
                 $composite = CompositeCondition::and();
             }
             $or = CompositeCondition::or();
-            foreach ($config['andWhereOr'] as $group) {
+            $groups = $config->requireListOf('andWhereOr', ValueType::oneOf(
+                ValueType::string(),
+                ValueType::listOf(ValueType::string())
+            ));
+            foreach ($groups as $group) {
                 $and = CompositeCondition::and();
                 $this->addToComposite($and, $group);
                 $or->add($and);

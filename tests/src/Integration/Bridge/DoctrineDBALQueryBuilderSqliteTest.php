@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace Derafu\TestsQuery\Integration\Bridge;
 
+use Derafu\Array\ArrayReader;
 use Derafu\Query\Bridge\DoctrineDBALQueryBuilderConditionApplier;
 use Derafu\Query\Builder\AliasScope;
 use Derafu\Query\Builder\Sql\SqlBuilderWhere;
@@ -29,6 +30,7 @@ use Derafu\Query\Filter\Segment;
 use Derafu\Query\Operator\Operator;
 use Derafu\Query\Operator\OperatorLoader;
 use Derafu\Query\Operator\OperatorManager;
+use Derafu\Value\ValueType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Query\QueryBuilder as DoctrineDBALQueryBuilder;
@@ -136,13 +138,13 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
 
     /**
      * @param array{sql:string,parameters:array<string,mixed>} $sql
-     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $query
+     * @param ArrayReader $query
      */
     #[DataProvider('queryProvider')]
     public function testSqlQueries(
         string $description,
         array $sql,
-        array $query
+        ArrayReader $query
     ): void {
         $expected = $this->connection->fetchAllAssociative($sql['sql'], $sql['parameters']);
 
@@ -153,18 +155,23 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
     }
 
     /**
-     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int}}>
+     * @return array<string,array{string,array{sql:string,parameters:array<string,mixed>},ArrayReader}>
      */
     public static function queryProvider(): array
     {
-        $cases = require __DIR__ . '/../../../fixtures/integration/queries_integration.php';
+        $cases = ArrayReader::fromValue(require __DIR__ . '/../../../fixtures/integration/queries_integration.php');
         $data = [];
 
-        foreach ($cases['cases'] as $name => $case) {
+        foreach ($cases->requireMapOf('cases', ValueType::array()) as $name => $case) {
+            $case = ArrayReader::fromArray($case);
+            $sql = $case->requireReader('sql');
             $data[$name] = [
-                $case['description'],
-                $case['sql'],
-                $case['query'],
+                $case->requireString('description'),
+                [
+                    'sql' => $sql->requireString('sql'),
+                    'parameters' => $sql->requireMap('parameters'),
+                ],
+                $case->requireReader('query', ValueType::map()),
             ];
         }
 
@@ -172,45 +179,45 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
     }
 
     /**
-     * Builds a Doctrine DBAL QueryBuilder from a query config array.
+     * Builds a Doctrine DBAL QueryBuilder from a query configuration reader.
      *
-     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $config
+     * @param ArrayReader $config
      */
-    private function buildQueryFromConfig(array $config): DoctrineDBALQueryBuilder
+    private function buildQueryFromConfig(ArrayReader $config): DoctrineDBALQueryBuilder
     {
         $qb = $this->connection->createQueryBuilder();
 
         // FROM / table.
-        if (isset($config['table'])) {
-            $alias = $config['alias'] ?? null;
-            $qb->from($config['table'], $alias);
+        if ($config->hasValue('table')) {
+            $alias = $config->getString('alias');
+            $qb->from($config->requireString('table'), $alias);
         }
 
         // SELECT.
-        if (isset($config['select'])) {
-            $qb->select((string) $config['select']);
+        if ($config->hasValue('select')) {
+            $qb->select($config->requireString('select'));
         } else {
             $qb->select('*');
         }
 
         // DISTINCT.
-        if (isset($config['distinct']) && $config['distinct']) {
+        if ($config->hasValue('distinct') && $config->requireBool('distinct')) {
             $qb->distinct();
         }
 
         // Explicit JOINs (non-path based).
         foreach (['innerJoin', 'leftJoin', 'rightJoin'] as $joinType) {
-            if (!isset($config[$joinType])) {
+            if (!$config->hasValue($joinType)) {
                 continue;
             }
-            $join = $config[$joinType];
-            $fromAlias = $config['alias'] ?? $config['table'] ?? null;
+            $join = $config->requireReader($joinType, ValueType::map());
+            $fromAlias = $config->getString('alias') ?? $config->getString('table');
             $this->assertIsString($fromAlias);
-            $joinAlias = $join['alias'] ?? $join['table'];
+            $joinAlias = $join->getString('alias') ?? $join->requireString('table');
             match ($joinType) {
-                'innerJoin' => $qb->innerJoin($fromAlias, $join['table'], $joinAlias, $join['condition']),
-                'leftJoin' => $qb->leftJoin($fromAlias, $join['table'], $joinAlias, $join['condition']),
-                'rightJoin' => $qb->rightJoin($fromAlias, $join['table'], $joinAlias, $join['condition']),
+                'innerJoin' => $qb->innerJoin($fromAlias, $join->requireString('table'), $joinAlias, $join->requireString('condition')),
+                'leftJoin' => $qb->leftJoin($fromAlias, $join->requireString('table'), $joinAlias, $join->requireString('condition')),
+                'rightJoin' => $qb->rightJoin($fromAlias, $join->requireString('table'), $joinAlias, $join->requireString('condition')),
             };
         }
 
@@ -221,33 +228,44 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
         }
 
         // HAVING conditions via the applier.
-        if (isset($config['having'])) {
+        if ($config->hasValue('having')) {
             $havingComposite = CompositeCondition::and();
-            $this->addToComposite($havingComposite, $config['having']);
+            $this->addToComposite(
+                $havingComposite,
+                $config->require('having', ValueType::oneOf(
+                    ValueType::string(),
+                    ValueType::listOf(ValueType::oneOf(
+                        ValueType::string(),
+                        ValueType::listOf(ValueType::string())
+                    ))
+                ))
+            );
             $this->applier->applyHaving($qb, $havingComposite);
         }
 
         // GROUP BY.
-        if (isset($config['groupBy'])) {
-            $groups = is_array($config['groupBy'])
-                ? $config['groupBy']
-                : [$config['groupBy']];
+        if ($config->hasValue('groupBy')) {
+            $groupBy = $config->require('groupBy', ValueType::oneOf(
+                ValueType::string(),
+                ValueType::listOf(ValueType::string())
+            ));
+            $groups = is_array($groupBy) ? $groupBy : [$groupBy];
             $qb->groupBy(...$groups);
         }
 
         // ORDER BY.
-        if (isset($config['orderBy'])) {
-            foreach ($config['orderBy'] as $column => $direction) {
+        if ($config->hasValue('orderBy')) {
+            foreach ($config->requireMapOf('orderBy', ValueType::string()) as $column => $direction) {
                 $qb->addOrderBy($column, $direction);
             }
         }
 
         // LIMIT / OFFSET.
-        if (isset($config['limit'])) {
-            $qb->setMaxResults($config['limit']);
+        if ($config->hasValue('limit')) {
+            $qb->setMaxResults($config->requireInt('limit'));
         }
-        if (isset($config['offset'])) {
-            $qb->setFirstResult($config['offset']);
+        if ($config->hasValue('offset')) {
+            $qb->setFirstResult($config->requireInt('offset'));
         }
 
         return $qb;
@@ -257,46 +275,57 @@ class DoctrineDBALQueryBuilderSqliteTest extends TestCase
      * Builds a CompositeCondition from the where/andWhere/orWhere/andWhereOr
      * config keys, following the same composition logic as SqlQueryBuilder.
      *
-     * @param array{table?:string,alias?:string,select?:string,distinct?:bool,where?:string|list<string|list<string>>,andWhere?:string|list<string|list<string>>,orWhere?:string|list<string|list<string>>,andWhereOr?:list<string|list<string>>,having?:string|list<string|list<string>>,composite?:string,innerJoin?:array{table:string,condition:string,alias?:string},leftJoin?:array{table:string,condition:string,alias?:string},rightJoin?:array{table:string,condition:string,alias?:string},groupBy?:string|list<string>,orderBy?:array<string,string>,limit?:int,offset?:int} $config
+     * @param ArrayReader $config
      */
-    private function buildWhereComposite(array $config): ?CompositeConditionInterface
+    private function buildWhereComposite(ArrayReader $config): ?CompositeConditionInterface
     {
+        $conditionType = ValueType::oneOf(
+            ValueType::string(),
+            ValueType::listOf(ValueType::oneOf(
+                ValueType::string(),
+                ValueType::listOf(ValueType::string())
+            ))
+        );
         $composite = null;
 
         // where.
-        if (isset($config['where'])) {
+        if ($config->hasValue('where')) {
             $composite = CompositeCondition::and();
-            $this->addToComposite($composite, $config['where']);
+            $this->addToComposite($composite, $config->require('where', $conditionType));
         }
 
         // andWhere is applied before orWhere (matches QueryConfig::applyTo order).
-        if (isset($config['andWhere'])) {
+        if ($config->hasValue('andWhere')) {
             if ($composite === null) {
                 $composite = CompositeCondition::and();
             }
-            $this->addToComposite($composite, $config['andWhere']);
+            $this->addToComposite($composite, $config->require('andWhere', $conditionType));
         }
 
         // orWhere wraps the existing composite in an OR.
-        if (isset($config['orWhere'])) {
+        if ($config->hasValue('orWhere')) {
             if ($composite === null) {
                 $composite = CompositeCondition::and();
-                $this->addToComposite($composite, $config['orWhere']);
+                $this->addToComposite($composite, $config->require('orWhere', $conditionType));
             } else {
                 $existing = $composite;
                 $composite = CompositeCondition::or();
                 $composite->add($existing);
-                $this->addOrGroupToComposite($composite, $config['orWhere']);
+                $this->addOrGroupToComposite($composite, $config->require('orWhere', $conditionType));
             }
         }
 
         // andWhereOr adds an OR group ANDed to the current composite.
-        if (isset($config['andWhereOr'])) {
+        if ($config->hasValue('andWhereOr')) {
             if ($composite === null) {
                 $composite = CompositeCondition::and();
             }
             $or = CompositeCondition::or();
-            foreach ($config['andWhereOr'] as $group) {
+            $groups = $config->requireListOf('andWhereOr', ValueType::oneOf(
+                ValueType::string(),
+                ValueType::listOf(ValueType::string())
+            ));
+            foreach ($groups as $group) {
                 $and = CompositeCondition::and();
                 $this->addToComposite($and, $group);
                 $or->add($and);
